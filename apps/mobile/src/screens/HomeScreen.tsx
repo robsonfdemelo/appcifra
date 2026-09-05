@@ -8,6 +8,7 @@ export type AppFeature = 'songs' | 'tuner' | 'dictionary' | 'youtube' | 'pads' |
 type Props = {
   onOpenFeature: (feature: AppFeature) => void;
   onBottomTab: (tab: BottomTab) => void;
+  onSearch: (query: string) => void;
 };
 
 const features: Array<{
@@ -74,7 +75,8 @@ const songs = [
   { title: 'Anna Júlia', artist: 'Los Hermanos', key: 'E', art: 'AJ' }
 ];
 
-export function HomeScreen({ onOpenFeature, onBottomTab }: Props) {
+export function HomeScreen({ onOpenFeature, onBottomTab, onSearch }: Props) {
+  const [query, setQuery] = React.useState('');
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.flex}>
@@ -92,6 +94,10 @@ export function HomeScreen({ onOpenFeature, onBottomTab }: Props) {
           <View style={styles.searchShell}>
             <Text style={styles.searchIcon}>⌕</Text>
             <TextInput
+              value={query}
+              onChangeText={setQuery}
+              onSubmitEditing={() => onSearch(query)}
+              returnKeyType="search"
               placeholder="Buscar música, artista ou cifra"
               placeholderTextColor="#8B9591"
               style={styles.searchInput}
