@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "App Cifra",
+    "slug": "app-cifra",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.appcifra.mobile"
+    },
+    "android": {
+      "package": "com.appcifra.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#111111"
+      }
+    },
+    "plugins": [
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Permita que o App Cifra acesse o microfone para afinar instrumentos e reconhecer acordes.",
+          "recordAudioAndroid": true,
+          "enableBackgroundPlayback": false,
+          "enableBackgroundRecording": false
+        }
+      ],
+      "expo-asset"
+    ]
+  }
+}

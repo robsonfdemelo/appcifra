@@ -1,0 +1,7 @@
+nodeLinker: hoisted
+shamefullyHoist: true
+
+packages:
+  - apps/*
+  - packages/*
+  - services/*

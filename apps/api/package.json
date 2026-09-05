@@ -1,0 +1,24 @@
+{
+  "name": "@app-cifra/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @app-cifra/music-theory build && nest start --watch",
+    "build": "pnpm --filter @app-cifra/music-theory build && nest build",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@app-cifra/music-theory": "workspace:*",
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.0"
+  }
+}

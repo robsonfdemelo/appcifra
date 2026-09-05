@@ -1,0 +1,27 @@
+{
+  "name": "@app-cifra/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "pnpm --filter @app-cifra/music-theory build && expo start",
+    "android": "pnpm --filter @app-cifra/music-theory build && expo start --android",
+    "ios": "pnpm --filter @app-cifra/music-theory build && expo start --ios",
+    "build": "echo mobile-build-via-eas",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@app-cifra/music-theory": "workspace:*",
+    "expo": "~57.0.0",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "expo-audio": "~57.0.4",
+    "react-native-webview": "13.16.1",
+    "expo-asset": "~57.0.16",
+    "@react-native/debugger-frontend": "0.86.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "typescript": "~6.0.3"
+  }
+}
