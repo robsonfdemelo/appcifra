@@ -26,9 +26,9 @@ export class MusicService {
     MusicSearchProvider[];
 
   constructor(
-    cifraClubSearchProvider:
+    private readonly cifraClubSearchProvider:
       CifraClubSearchProvider,
-    musicBrainzProvider:
+    private readonly musicBrainzProvider:
       MusicBrainzProvider,
     private readonly cifraClubPersonalProvider:
       CifraClubPersonalProvider
@@ -56,39 +56,58 @@ export class MusicService {
       };
     }
 
-    const settled =
-      await Promise.allSettled(
-        this.searchProviders.map(
-          provider =>
-            provider.search(
-              normalized
-            )
-        )
+    let cifraClubItems:
+      SongSearchResult[] = [];
+
+    try {
+      cifraClubItems =
+        await this.cifraClubSearchProvider.search(
+          normalized
+        );
+    } catch (error) {
+      console.warn(
+        '[MusicService] Cifra Club search failed:',
+        error
       );
+    }
 
-    const providerItems =
-      settled.map(result =>
-        result.status ===
-        'fulfilled'
-          ? result.value
-          : []
+    if (
+      cifraClubItems.length > 0
+    ) {
+      return {
+        query: normalized,
+        providerCount:
+          this.searchProviders.length,
+        items:
+          this.dedupe(
+            cifraClubItems
+          ).slice(0, 20)
+      };
+    }
+
+    let musicBrainzItems:
+      SongSearchResult[] = [];
+
+    try {
+      musicBrainzItems =
+        await this.musicBrainzProvider.search(
+          normalized
+        );
+    } catch (error) {
+      console.warn(
+        '[MusicService] MusicBrainz fallback failed:',
+        error
       );
-
-    const cifraClubItems =
-      providerItems[0] ?? [];
-
-    const musicBrainzItems =
-      providerItems[1] ?? [];
+    }
 
     return {
       query: normalized,
       providerCount:
         this.searchProviders.length,
       items:
-        this.dedupe([
-          ...cifraClubItems,
-          ...musicBrainzItems
-        ]).slice(0, 20)
+        this.dedupe(
+          musicBrainzItems
+        ).slice(0, 20)
     };
   }
 
@@ -104,8 +123,11 @@ export class MusicService {
       if (chart) {
         return chart;
       }
-    } catch {
-      // retorno seguro abaixo
+    } catch (error) {
+      console.warn(
+        '[MusicService] Chart load failed:',
+        error
+      );
     }
 
     return {

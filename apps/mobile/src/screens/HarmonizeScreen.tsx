@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Alert,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -7,15 +8,30 @@ import {
   Text,
   View
 } from 'react-native';
+import {
+  requestRecordingPermissionsAsync,
+  useAudioStream,
+  type AudioStreamBuffer
+} from 'expo-audio';
 
 import { transposeNote } from '@app-cifra/music-theory';
 import { colors } from '../theme';
+import {
+  detectKeyFromChroma,
+  extractChroma,
+  mergeChroma,
+  type DetectedMode
+} from '../audio/keyDetection';
+import {
+  prepareRecordingAudio,
+  releaseAudioSession
+} from '../audio/session';
 
 type Props = {
   onBack: () => void;
 };
 
-type Mode = 'major' | 'minor';
+type Mode = DetectedMode;
 
 const ROOTS = [
   'C',
@@ -69,6 +85,49 @@ function progression(chords: string[], indexes: number[]) {
 export function HarmonizeScreen({ onBack }: Props) {
   const [root, setRoot] = React.useState('C');
   const [mode, setMode] = React.useState<Mode>('major');
+  const [confidence, setConfidence] = React.useState<number | null>(null);
+  const [listeningSeconds, setListeningSeconds] = React.useState(0);
+  const [framesAccepted, setFramesAccepted] = React.useState(0);
+
+  const accumulatedChroma = React.useRef<number[]>(
+    new Array<number>(12).fill(0)
+  );
+  const lastFrameAt = React.useRef(0);
+  const startedAt = React.useRef(0);
+  const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const audioStream = useAudioStream({
+    sampleRate: 48000,
+    channels: 1,
+    encoding: 'float32',
+    onBuffer: (buffer: AudioStreamBuffer) => {
+      const now = Date.now();
+
+      if (now - lastFrameAt.current < 180) {
+        return;
+      }
+
+      lastFrameAt.current = now;
+
+      const frames = new Float32Array(buffer.data);
+      const chroma = extractChroma(frames, buffer.sampleRate);
+
+      if (!chroma) {
+        return;
+      }
+
+      mergeChroma(accumulatedChroma.current, chroma);
+      setFramesAccepted(current => current + 1);
+
+      const result = detectKeyFromChroma(accumulatedChroma.current);
+
+      if (result && framesAccepted >= 5) {
+        setRoot(result.root);
+        setMode(result.mode);
+        setConfidence(result.confidence);
+      }
+    }
+  });
 
   const harmony = React.useMemo(
     () => buildHarmony(root, mode),
@@ -89,6 +148,93 @@ export function HarmonizeScreen({ onBack }: Props) {
           [0, 6, 5, 6],
           [0, 5, 3, 4]
         ];
+
+  React.useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+
+      try {
+        audioStream.stream.stop();
+      } catch {}
+
+      releaseAudioSession().catch(() => undefined);
+    };
+  }, []);
+
+  async function stopDetection() {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    try {
+      audioStream.stream.stop();
+    } catch {}
+
+    const result = detectKeyFromChroma(accumulatedChroma.current);
+
+    if (result && framesAccepted >= 6) {
+      setRoot(result.root);
+      setMode(result.mode);
+      setConfidence(result.confidence);
+    }
+
+    await releaseAudioSession();
+  }
+
+  async function startDetection() {
+    if (audioStream.isStreaming) {
+      await stopDetection();
+      return;
+    }
+
+    const permission = await requestRecordingPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert(
+        'Microfone',
+        'Precisamos da permissão do microfone para detectar a tonalidade.'
+      );
+      return;
+    }
+
+    accumulatedChroma.current = new Array<number>(12).fill(0);
+    setFramesAccepted(0);
+    setListeningSeconds(0);
+    setConfidence(null);
+    lastFrameAt.current = 0;
+    startedAt.current = Date.now();
+
+    try {
+      await prepareRecordingAudio();
+      await audioStream.stream.start();
+
+      timerRef.current = setInterval(() => {
+        const elapsed = Math.floor(
+          (Date.now() - startedAt.current) / 1000
+        );
+
+        setListeningSeconds(elapsed);
+
+        if (elapsed >= 10) {
+          void stopDetection();
+        }
+      }, 500);
+    } catch {
+      Alert.alert(
+        'Detectar tonalidade',
+        'Não foi possível iniciar a leitura do microfone.'
+      );
+    }
+  }
+
+  const detectionLabel = audioStream.isStreaming
+    ? `Ouvindo... ${Math.min(listeningSeconds, 10)}s`
+    : confidence !== null
+      ? `${root} ${mode === 'major' ? 'maior' : 'menor'}`
+      : 'Pronto para ouvir';
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -111,7 +257,7 @@ export function HarmonizeScreen({ onBack }: Props) {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.hero}>
-            <Text style={styles.heroEyebrow}>TOM SELECIONADO</Text>
+            <Text style={styles.heroEyebrow}>TOM ATUAL</Text>
 
             <Text style={styles.heroKey}>
               {root}
@@ -121,8 +267,50 @@ export function HarmonizeScreen({ onBack }: Props) {
             </Text>
 
             <Text style={styles.heroText}>
-              Escolha um tom para visualizar escala, graus, acordes e progressões.
+              Detecte o tom pelo microfone ou ajuste manualmente abaixo.
             </Text>
+          </View>
+
+          <View style={styles.detectorCard}>
+            <View style={styles.detectorHeader}>
+              <View>
+                <Text style={styles.detectorEyebrow}>DETECTAR PELO ÁUDIO</Text>
+                <Text style={styles.detectorTitle}>{detectionLabel}</Text>
+              </View>
+
+              <View
+                style={[
+                  styles.liveDot,
+                  audioStream.isStreaming ? styles.liveDotActive : null
+                ]}
+              />
+            </View>
+
+            <Text style={styles.detectorText}>
+              Toque a música perto do microfone por alguns segundos. Para uma leitura melhor, use um trecho com acordes claros e pouca fala.
+            </Text>
+
+            {confidence !== null && !audioStream.isStreaming ? (
+              <View style={styles.confidenceRow}>
+                <Text style={styles.confidenceLabel}>Confiança estimada</Text>
+                <Text style={styles.confidenceValue}>{confidence}%</Text>
+              </View>
+            ) : null}
+
+            <Pressable
+              onPress={startDetection}
+              style={[
+                styles.detectButton,
+                audioStream.isStreaming ? styles.detectButtonActive : null
+              ]}
+            >
+              <Text style={styles.detectButtonIcon}>
+                {audioStream.isStreaming ? '■' : '●'}
+              </Text>
+              <Text style={styles.detectButtonText}>
+                {audioStream.isStreaming ? 'Parar análise' : 'Detectar tonalidade'}
+              </Text>
+            </Pressable>
           </View>
 
           <Text style={styles.sectionTitle}>Tonalidade</Text>
@@ -134,7 +322,10 @@ export function HarmonizeScreen({ onBack }: Props) {
               return (
                 <Pressable
                   key={note}
-                  onPress={() => setRoot(note)}
+                  onPress={() => {
+                    setRoot(note);
+                    setConfidence(null);
+                  }}
                   style={[
                     styles.rootButton,
                     active && styles.rootButtonActive
@@ -155,7 +346,10 @@ export function HarmonizeScreen({ onBack }: Props) {
 
           <View style={styles.modeRow}>
             <Pressable
-              onPress={() => setMode('major')}
+              onPress={() => {
+                setMode('major');
+                setConfidence(null);
+              }}
               style={[
                 styles.modeButton,
                 mode === 'major' && styles.modeButtonActive
@@ -172,7 +366,10 @@ export function HarmonizeScreen({ onBack }: Props) {
             </Pressable>
 
             <Pressable
-              onPress={() => setMode('minor')}
+              onPress={() => {
+                setMode('minor');
+                setConfidence(null);
+              }}
               style={[
                 styles.modeButton,
                 mode === 'minor' && styles.modeButtonActive
@@ -240,15 +437,10 @@ export function HarmonizeScreen({ onBack }: Props) {
             ))}
           </View>
 
-          <View style={styles.nextCard}>
-            <Text style={styles.nextTag}>PRÓXIMA ETAPA</Text>
-
-            <Text style={styles.nextTitle}>
-              Detectar o tom pelo áudio
-            </Text>
-
-            <Text style={styles.nextText}>
-              Depois conectamos esta tela ao microfone/análise de áudio para preencher automaticamente o tom provável da música.
+          <View style={styles.infoCard}>
+            <Text style={styles.infoTitle}>Primeira versão da detecção</Text>
+            <Text style={styles.infoText}>
+              A análise considera a distribuição das 12 notas durante cerca de 10 segundos e compara perfis de tonalidades maiores e menores. Você continua podendo corrigir o resultado manualmente.
             </Text>
           </View>
         </ScrollView>
@@ -339,6 +531,88 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 4,
     maxWidth: 285
+  },
+  detectorCard: {
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2EAE5',
+    padding: 17,
+    marginTop: 14
+  },
+  detectorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  detectorEyebrow: {
+    color: colors.greenDark,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.4
+  },
+  detectorTitle: {
+    color: colors.ink,
+    fontSize: 17,
+    fontWeight: '900',
+    marginTop: 5
+  },
+  detectorText: {
+    color: colors.muted,
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 10
+  },
+  liveDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#C5CEC9'
+  },
+  liveDotActive: {
+    backgroundColor: colors.green
+  },
+  confidenceRow: {
+    minHeight: 42,
+    borderRadius: 13,
+    backgroundColor: '#F1F8F3',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    marginTop: 12
+  },
+  confidenceLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '700'
+  },
+  confidenceValue: {
+    color: colors.greenDark,
+    fontSize: 14,
+    fontWeight: '900'
+  },
+  detectButton: {
+    minHeight: 50,
+    borderRadius: 15,
+    backgroundColor: colors.green,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    marginTop: 13
+  },
+  detectButtonActive: {
+    backgroundColor: '#1B2C25'
+  },
+  detectButtonIcon: {
+    color: '#FFFFFF',
+    fontSize: 12
+  },
+  detectButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900'
   },
   sectionTitle: {
     color: colors.ink,
@@ -473,27 +747,20 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     marginTop: 6
   },
-  nextCard: {
+  infoCard: {
     borderRadius: 20,
     backgroundColor: '#EDF7F0',
     padding: 18,
     marginTop: 26
   },
-  nextTag: {
-    color: colors.greenDark,
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 1.3
-  },
-  nextTitle: {
+  infoTitle: {
     color: colors.ink,
-    fontSize: 17,
-    fontWeight: '900',
-    marginTop: 7
+    fontSize: 15,
+    fontWeight: '900'
   },
-  nextText: {
+  infoText: {
     color: colors.muted,
-    fontSize: 12,
+    fontSize: 11,
     lineHeight: 18,
     marginTop: 5
   }

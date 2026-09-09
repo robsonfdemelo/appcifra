@@ -80,10 +80,35 @@ function isCifraUrl(value: string) {
       'blog'
     ]);
 
-    return !blocked.has(parts[0] ?? '');
+    return !blocked.has(
+      parts[0] ?? ''
+    );
   } catch {
     return false;
   }
+}
+
+function tokenCoverage(
+  queryTokens: string[],
+  candidate: string
+) {
+  if (!queryTokens.length) {
+    return 0;
+  }
+
+  const normalizedCandidate =
+    normalize(candidate);
+
+  const hits =
+    queryTokens.filter(
+      token =>
+        normalizedCandidate.includes(
+          token
+        )
+    ).length;
+
+  return hits /
+    queryTokens.length;
 }
 
 function scoreCandidate(
@@ -99,31 +124,37 @@ function scoreCandidate(
 
   let score = 0;
 
-  if (t === q) score += 1200;
-  if (combined === q) score += 1000;
-  if (t.startsWith(q)) score += 700;
-  if (t.includes(q)) score += 550;
-  if (combined.includes(q)) score += 350;
-
-  const titleHits =
-    qTokens.filter(token =>
-      t.includes(token)
-    ).length;
-
-  const combinedHits =
-    qTokens.filter(token =>
-      combined.includes(token)
-    ).length;
+  if (t === q) score += 1800;
+  if (combined === q) score += 1500;
+  if (t.startsWith(q)) score += 800;
+  if (t.includes(q)) score += 650;
+  if (combined.includes(q)) score += 400;
 
   score +=
-    (titleHits /
-      Math.max(1, qTokens.length)) *
-    500;
+    tokenCoverage(
+      qTokens,
+      t
+    ) * 600;
 
   score +=
-    (combinedHits /
-      Math.max(1, qTokens.length)) *
-    250;
+    tokenCoverage(
+      qTokens,
+      a
+    ) * 220;
+
+  score +=
+    tokenCoverage(
+      qTokens,
+      combined
+    ) * 260;
+
+  if (
+    /\b(ao vivo|live|cover|karaoke|playback|tributo|remix)\b/i.test(
+      `${title} ${artist}`
+    )
+  ) {
+    score -= 40;
+  }
 
   return score;
 }
@@ -141,63 +172,23 @@ export class CifraClubSearchProvider
     const normalized =
       query.trim();
 
-    if (normalized.length < 2) {
+    if (
+      normalized.length < 2
+    ) {
       return [];
     }
-
-    const searchQuery =
-      `site:cifraclub.com.br ${normalized}`;
-
-    const searchUrl =
-      `https://html.duckduckgo.com/html/?q=${encodeURIComponent(searchQuery)}`;
-
-    const response =
-      await fetch(searchUrl, {
-        headers: {
-          Accept:
-            'text/html,application/xhtml+xml',
-          'Accept-Language':
-            'pt-BR,pt;q=0.9,en;q=0.8',
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128 Safari/537.36'
-        },
-        signal:
-          AbortSignal.timeout(10000)
-      });
-
-    if (!response.ok) {
-      return [];
-    }
-
-    const html =
-      await response.text();
-
-    const $ =
-      cheerio.load(html);
-
-    const links =
-      new Set<string>();
-
-    $('a.result__a, a.result-link').each(
-      (_, element) => {
-        const href =
-          $(element).attr('href');
-
-        if (!href) return;
-
-        const decoded =
-          decodeDuckDuckGoUrl(href);
-
-        if (isCifraUrl(decoded)) {
-          links.add(decoded);
-        }
-      }
-    );
 
     const urls =
-      Array.from(links).slice(0, 10);
+      await this.discoverUrls(
+        normalized
+      );
 
     if (!urls.length) {
+      console.warn(
+        '[CifraClubSearch] nenhum link de cifra encontrado para:',
+        normalized
+      );
+
       return [];
     }
 
@@ -205,7 +196,7 @@ export class CifraClubSearchProvider
       await Promise.allSettled(
         urls.map(url =>
           this.inspectCandidate(
-            query,
+            normalized,
             url
           )
         )
@@ -214,34 +205,137 @@ export class CifraClubSearchProvider
     const candidates =
       settled
         .flatMap(result =>
-          result.status === 'fulfilled' &&
+          result.status ===
+            'fulfilled' &&
           result.value
             ? [result.value]
             : []
         )
         .sort(
           (a, b) =>
-            b.score - a.score
+            b.score -
+            a.score
         )
-        .slice(0, 8);
+        .slice(0, 20);
+
+    console.log(
+      `[CifraClubSearch] ${candidates.length} cifra(s) válida(s) para "${normalized}"`
+    );
 
     return candidates.map(
-      (candidate, index) => ({
+      candidate => ({
         id:
           `cifraclub:${this.pathId(candidate.url)}`,
-        provider: this.name,
+        provider:
+          this.name,
         externalId:
           this.pathId(candidate.url),
-        title: candidate.title,
-        artist: candidate.artist,
+        title:
+          candidate.title,
+        artist:
+          candidate.artist,
         sourceLabel:
           'Cifra Club · uso pessoal',
-        sourceUrl: candidate.url,
-        ...(index === 0
-          ? {}
-          : {})
+        sourceUrl:
+          candidate.url
       })
     );
+  }
+
+  private async discoverUrls(
+    query: string
+  ) {
+    const searchQueries = [
+      `site:cifraclub.com.br "${query}" cifra`,
+      `site:cifraclub.com.br ${query}`
+    ];
+
+    const discovered =
+      new Set<string>();
+
+    for (
+      const searchQuery of searchQueries
+    ) {
+      try {
+        const searchUrl =
+          `https://html.duckduckgo.com/html/?q=${encodeURIComponent(searchQuery)}`;
+
+        const response =
+          await fetch(
+            searchUrl,
+            {
+              headers: {
+                Accept:
+                  'text/html,application/xhtml+xml',
+                'Accept-Language':
+                  'pt-BR,pt;q=0.9,en;q=0.8',
+                'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128 Safari/537.36'
+              },
+              signal:
+                AbortSignal.timeout(
+                  10000
+                )
+            }
+          );
+
+        if (!response.ok) {
+          console.warn(
+            '[CifraClubSearch] busca externa respondeu:',
+            response.status
+          );
+
+          continue;
+        }
+
+        const html =
+          await response.text();
+
+        const $ =
+          cheerio.load(html);
+
+        $('a').each(
+          (_, element) => {
+            const href =
+              $(element)
+                .attr('href');
+
+            if (!href) {
+              return;
+            }
+
+            const decoded =
+              decodeDuckDuckGoUrl(
+                href
+              );
+
+            if (
+              isCifraUrl(decoded)
+            ) {
+              discovered.add(
+                decoded
+              );
+            }
+          }
+        );
+      } catch (error) {
+        console.warn(
+          '[CifraClubSearch] falha ao descobrir links:',
+          error
+        );
+      }
+
+      if (
+        discovered.size >=
+        20
+      ) {
+        break;
+      }
+    }
+
+    return Array.from(
+      discovered
+    ).slice(0, 20);
   }
 
   private async inspectCandidate(
@@ -249,19 +343,25 @@ export class CifraClubSearchProvider
     url: string
   ): Promise<Candidate | null> {
     const response =
-      await fetch(url, {
-        headers: {
-          Accept:
-            'text/html,application/xhtml+xml',
-          'Accept-Language':
-            'pt-BR,pt;q=0.9,en;q=0.8',
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128 Safari/537.36'
-        },
-        redirect: 'follow',
-        signal:
-          AbortSignal.timeout(8000)
-      });
+      await fetch(
+        url,
+        {
+          headers: {
+            Accept:
+              'text/html,application/xhtml+xml',
+            'Accept-Language':
+              'pt-BR,pt;q=0.9,en;q=0.8',
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128 Safari/537.36'
+          },
+          redirect:
+            'follow',
+          signal:
+            AbortSignal.timeout(
+              8000
+            )
+        }
+      );
 
     if (!response.ok) {
       return null;
@@ -272,6 +372,26 @@ export class CifraClubSearchProvider
 
     const $ =
       cheerio.load(html);
+
+    const chartElement =
+      $('.cifra_cnt pre')
+        .first()
+        .length
+        ? $('.cifra_cnt pre')
+            .first()
+        : $('pre').first();
+
+    const chartText =
+      chartElement
+        .text()
+        .trim();
+
+    if (
+      !chartElement.length ||
+      chartText.length < 20
+    ) {
+      return null;
+    }
 
     const h1 =
       $('h1')
@@ -285,22 +405,47 @@ export class CifraClubSearchProvider
         .text()
         .trim();
 
-    let title = h1;
-    let artist = '';
+    const ogTitle =
+      $('meta[property="og:title"]')
+        .attr('content')
+        ?.trim() ??
+      '';
 
-    const titleMatch =
-      pageTitle.match(
-        /^(.+?)\s+-\s+(.+?)\s+-\s+Cifra Club/i
-      );
+    let title =
+      h1;
 
-    if (titleMatch) {
-      title =
-        titleMatch[1]?.trim() ||
-        title;
+    let artist =
+      '';
 
-      artist =
-        titleMatch[2]?.trim() ||
-        '';
+    const candidateTitles = [
+      pageTitle,
+      ogTitle
+    ];
+
+    for (
+      const value of candidateTitles
+    ) {
+      if (!value) {
+        continue;
+      }
+
+      const match =
+        value.match(
+          /^(.+?)\s+-\s+(.+?)(?:\s+-\s+Cifra Club|\s+\|\s+Cifra Club|\s+\(Cifra Club\)|$)/i
+        );
+
+      if (
+        match?.[1] &&
+        match?.[2]
+      ) {
+        title =
+          match[1].trim();
+
+        artist =
+          match[2].trim();
+
+        break;
+      }
     }
 
     if (!title) {
@@ -309,20 +454,27 @@ export class CifraClubSearchProvider
 
     if (!artist) {
       const canonicalParts =
-        new URL(url)
+        new URL(
+          response.url ||
+            url
+        )
           .pathname
           .split('/')
           .filter(Boolean);
 
       artist =
         canonicalParts[0]
-          ?.replace(/-/g, ' ') ??
+          ?.replace(
+            /-/g,
+            ' '
+          ) ??
         'Artista não informado';
     }
 
     return {
       url:
-        response.url || url,
+        response.url ||
+        url,
       title,
       artist,
       score:
@@ -334,9 +486,13 @@ export class CifraClubSearchProvider
     };
   }
 
-  private pathId(url: string) {
+  private pathId(
+    url: string
+  ) {
     try {
-      return new URL(url)
+      return new URL(
+        url
+      )
         .pathname
         .split('/')
         .filter(Boolean)
