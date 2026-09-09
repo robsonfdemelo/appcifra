@@ -1,46 +1,46 @@
-import React, { useEffect, useState } from 'react';
-import { Alert, StatusBar } from 'react-native';
-import { type BottomTab } from './src/components/BottomNav';
-import { ChordDictionaryScreen } from './src/screens/ChordDictionaryScreen';
-import { HomeScreen, type AppFeature } from './src/screens/HomeScreen';
-import { LoginScreen } from './src/screens/LoginScreen';
-import { PadsScreen } from './src/screens/PadsScreen';
-import { PlaceholderScreen } from './src/screens/PlaceholderScreen';
-import { SetlistDetailScreen } from './src/screens/SetlistDetailScreen';
-import { SetlistsScreen } from './src/screens/SetlistsScreen';
-import { SongDetailScreen } from './src/screens/SongDetailScreen';
-import { SongsSearchScreen } from './src/screens/SongsSearchScreen';
-import { TunerScreen } from './src/screens/TunerScreen';
-import { YoutubeScreen } from './src/screens/YoutubeScreen';
+import React, { useEffect, useState } from "react";
+import { Alert, StatusBar } from "react-native";
+import { type BottomTab } from "./src/components/BottomNav";
+import { ChordDictionaryScreen } from "./src/screens/ChordDictionaryScreen";
+import { HomeScreen, type AppFeature } from "./src/screens/HomeScreen";
+import { HarmonizeScreen } from "./src/screens/HarmonizeScreen";
+import { PadsScreen } from "./src/screens/PadsScreen";
+import { PlaceholderScreen } from "./src/screens/PlaceholderScreen";
+import { SetlistDetailScreen } from "./src/screens/SetlistDetailScreen";
+import { SetlistsScreen } from "./src/screens/SetlistsScreen";
+import { SongDetailScreen } from "./src/screens/SongDetailScreen";
+import { SongsSearchScreen } from "./src/screens/SongsSearchScreen";
+import { TunerScreen } from "./src/screens/TunerScreen";
+import { YoutubeScreen } from "./src/screens/YoutubeScreen";
 import {
   type Setlist,
   type SetlistSong,
-  type SongSearchResult
-} from './src/music/types';
-import { loadSetlists, saveSetlists } from './src/storage/setlists';
+  type SongSearchResult,
+} from "./src/music/types";
+import { loadSetlists, saveSetlists } from "./src/storage/setlists";
 
 type Screen =
-  | 'login'
-  | 'home'
-  | 'songs'
-  | 'song-detail'
-  | 'tuner'
-  | 'dictionary'
-  | 'youtube'
-  | 'pads'
-  | 'setlists'
-  | 'setlist-detail'
-  | 'search'
-  | 'tools'
-  | 'favorites'
-  | 'profile';
+  | "harmonize"
+  | "home"
+  | "songs"
+  | "song-detail"
+  | "tuner"
+  | "dictionary"
+  | "youtube"
+  | "pads"
+  | "setlists"
+  | "setlist-detail"
+  | "search"
+  | "tools"
+  | "favorites"
+  | "profile";
 
 function createSetlistSong(song: SongSearchResult): SetlistSong {
   const selectedKey = song.displayKey ?? song.originalKey;
 
   const setlistSong: SetlistSong = {
     ...song,
-    setlistItemId: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    setlistItemId: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   };
 
   if (selectedKey) {
@@ -51,17 +51,21 @@ function createSetlistSong(song: SongSearchResult): SetlistSong {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('login');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSong, setSelectedSong] = useState<SongSearchResult | null>(null);
+  const [screen, setScreen] = useState<Screen>("home");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSong, setSelectedSong] = useState<SongSearchResult | null>(
+    null,
+  );
   const [pendingSong, setPendingSong] = useState<SongSearchResult | null>(null);
   const [setlists, setSetlists] = useState<Setlist[]>([]);
-  const [selectedSetlistId, setSelectedSetlistId] = useState<string | null>(null);
+  const [selectedSetlistId, setSelectedSetlistId] = useState<string | null>(
+    null,
+  );
   const [storageReady, setStorageReady] = useState(false);
 
   useEffect(() => {
     loadSetlists()
-      .then(value => {
+      .then((value) => {
         setSetlists(value);
         setStorageReady(true);
       })
@@ -79,60 +83,62 @@ export default function App() {
 
   function goHome() {
     setPendingSong(null);
-    setScreen('home');
+    setScreen("home");
   }
 
   function openFeature(feature: AppFeature) {
-    if (feature === 'songs') {
-      setSearchQuery('');
+    if (feature === "songs") {
+      setSearchQuery("");
     }
 
     setScreen(feature);
   }
 
   function openBottomTab(tab: BottomTab) {
-    if (tab === 'home') {
+    if (tab === "home") {
       goHome();
       return;
     }
 
-    if (tab === 'search') {
-      setSearchQuery('');
+    if (tab === "search") {
+      setSearchQuery("");
     }
 
     setScreen(tab);
   }
 
-  function openSearch(query = '') {
+  function openSearch(query = "") {
     setSearchQuery(query);
-    setScreen('search');
+    setScreen("search");
   }
 
   function openSong(song: SongSearchResult) {
     setSelectedSong(song);
-    setScreen('song-detail');
+    setScreen("song-detail");
   }
 
   function requestAddToSetlist(song: SongSearchResult) {
     setPendingSong(song);
-    setScreen('setlists');
+    setScreen("setlists");
   }
 
   function createSetlist(name: string) {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const songs: SetlistSong[] = pendingSong ? [createSetlistSong(pendingSong)] : [];
+    const songs: SetlistSong[] = pendingSong
+      ? [createSetlistSong(pendingSong)]
+      : [];
 
     const created: Setlist = {
       id,
       name,
       createdAt: new Date().toISOString(),
-      songs
+      songs,
     };
 
-    setSetlists(current => [created, ...current]);
+    setSetlists((current) => [created, ...current]);
     setPendingSong(null);
     setSelectedSetlistId(id);
-    setScreen('setlist-detail');
+    setScreen("setlist-detail");
   }
 
   function addPendingToSetlist(setlistId: string) {
@@ -140,59 +146,61 @@ export default function App() {
 
     const songToAdd = createSetlistSong(pendingSong);
 
-    setSetlists(current =>
-      current.map(setlist => {
+    setSetlists((current) =>
+      current.map((setlist) => {
         if (setlist.id !== setlistId) return setlist;
 
-        const alreadyExists = setlist.songs.some(item => item.id === pendingSong.id);
+        const alreadyExists = setlist.songs.some(
+          (item) => item.id === pendingSong.id,
+        );
 
         if (alreadyExists) {
           Alert.alert(
-            'Música já adicionada',
-            'Essa música já está neste setlist.'
+            "Música já adicionada",
+            "Essa música já está neste setlist.",
           );
           return setlist;
         }
 
         return {
           ...setlist,
-          songs: [...setlist.songs, songToAdd]
+          songs: [...setlist.songs, songToAdd],
         };
-      })
+      }),
     );
 
     setSelectedSetlistId(setlistId);
     setPendingSong(null);
-    setScreen('setlist-detail');
+    setScreen("setlist-detail");
   }
 
   function openSetlist(setlist: Setlist) {
     setSelectedSetlistId(setlist.id);
-    setScreen('setlist-detail');
+    setScreen("setlist-detail");
   }
 
   function removeFromSetlist(index: number) {
     if (!selectedSetlistId) return;
 
-    setSetlists(current =>
-      current.map(setlist =>
+    setSetlists((current) =>
+      current.map((setlist) =>
         setlist.id === selectedSetlistId
           ? {
               ...setlist,
               songs: setlist.songs.filter(
-                (_, itemIndex) => itemIndex !== index
-              )
+                (_, itemIndex) => itemIndex !== index,
+              ),
             }
-          : setlist
-      )
+          : setlist,
+      ),
     );
   }
 
   function moveSetlistSong(index: number, direction: -1 | 1) {
     if (!selectedSetlistId) return;
 
-    setSetlists(current =>
-      current.map(setlist => {
+    setSetlists((current) =>
+      current.map((setlist) => {
         if (setlist.id !== selectedSetlistId) return setlist;
 
         const target = index + direction;
@@ -214,27 +222,27 @@ export default function App() {
 
         return {
           ...setlist,
-          songs
+          songs,
         };
-      })
+      }),
     );
   }
 
   const selectedSetlist =
-    setlists.find(item => item.id === selectedSetlistId) ?? null;
+    setlists.find((item) => item.id === selectedSetlistId) ?? null;
 
-  const dark = screen === 'tuner';
+  const dark = screen === "tuner";
 
   return (
     <>
       <StatusBar
-        barStyle={dark ? 'light-content' : 'dark-content'}
-        backgroundColor={dark ? '#101514' : '#FFFFFF'}
+        barStyle={dark ? "light-content" : "dark-content"}
+        backgroundColor={dark ? "#101514" : "#FFFFFF"}
       />
 
-      {screen === 'login' ? <LoginScreen onLogin={goHome} /> : null}
+      {screen === "harmonize" ? <HarmonizeScreen onBack={goHome} /> : null}
 
-      {screen === 'home' ? (
+      {screen === "home" ? (
         <HomeScreen
           onOpenFeature={openFeature}
           onBottomTab={openBottomTab}
@@ -242,36 +250,36 @@ export default function App() {
         />
       ) : null}
 
-      {screen === 'tuner' ? <TunerScreen onBack={goHome} /> : null}
+      {screen === "tuner" ? <TunerScreen onBack={goHome} /> : null}
 
-      {screen === 'youtube' ? <YoutubeScreen onBack={goHome} /> : null}
+      {screen === "youtube" ? <YoutubeScreen onBack={goHome} /> : null}
 
-      {screen === 'pads' ? <PadsScreen onBack={goHome} /> : null}
+      {screen === "pads" ? <PadsScreen onBack={goHome} /> : null}
 
-      {screen === 'dictionary' ? (
+      {screen === "dictionary" ? (
         <ChordDictionaryScreen onBack={goHome} />
       ) : null}
 
-      {screen === 'songs' || screen === 'search' ? (
+      {screen === "songs" || screen === "search" ? (
         <SongsSearchScreen
           initialQuery={searchQuery}
           onBack={goHome}
           onOpenSong={openSong}
           onAddToSetlist={requestAddToSetlist}
-          {...(screen === 'search' ? { onBottomTab: openBottomTab } : {})}
+          {...(screen === "search" ? { onBottomTab: openBottomTab } : {})}
         />
       ) : null}
 
-      {screen === 'song-detail' && selectedSong ? (
+      {screen === "song-detail" && selectedSong ? (
         <SongDetailScreen
           song={selectedSong}
-          onBack={() => setScreen('search')}
+          onBack={() => setScreen("search")}
           onAddToSetlist={requestAddToSetlist}
-          onOpenPads={() => setScreen('pads')}
+          onOpenPads={() => setScreen("pads")}
         />
       ) : null}
 
-      {screen === 'setlists' ? (
+      {screen === "setlists" ? (
         <SetlistsScreen
           setlists={setlists}
           pendingSong={pendingSong}
@@ -282,24 +290,24 @@ export default function App() {
         />
       ) : null}
 
-      {screen === 'setlist-detail' && selectedSetlist ? (
+      {screen === "setlist-detail" && selectedSetlist ? (
         <SetlistDetailScreen
           setlist={selectedSetlist}
-          onBack={() => setScreen('setlists')}
-          onOpenSong={index => {
+          onBack={() => setScreen("setlists")}
+          onOpenSong={(index) => {
             const song = selectedSetlist.songs[index];
 
             if (!song) return;
 
             setSelectedSong(song);
-            setScreen('song-detail');
+            setScreen("song-detail");
           }}
           onRemove={removeFromSetlist}
           onMove={moveSetlistSong}
         />
       ) : null}
 
-      {screen === 'tools' ? (
+      {screen === "tools" ? (
         <PlaceholderScreen
           title="Ferramentas"
           subtitle="Centralizaremos Afinador, Metrônomo, Pads, Dicionário, Campo Harmônico e outras ferramentas musicais."
@@ -308,7 +316,7 @@ export default function App() {
         />
       ) : null}
 
-      {screen === 'favorites' ? (
+      {screen === "favorites" ? (
         <PlaceholderScreen
           title="Favoritas"
           subtitle="Suas cifras, músicas, acordes e repertórios favoritos ficarão disponíveis aqui, inclusive para uso offline."
@@ -317,7 +325,7 @@ export default function App() {
         />
       ) : null}
 
-      {screen === 'profile' ? (
+      {screen === "profile" ? (
         <PlaceholderScreen
           title="Perfil"
           subtitle="Perfil musical, instrumento principal, afinação, extensão vocal, preferências e progresso de estudo."

@@ -3,7 +3,14 @@ import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View 
 import { BottomNav, type BottomTab } from '../components/BottomNav';
 import { colors } from '../theme';
 
-export type AppFeature = 'songs' | 'tuner' | 'dictionary' | 'youtube' | 'pads' | 'setlists';
+export type AppFeature =
+  | 'songs'
+  | 'tuner'
+  | 'dictionary'
+  | 'youtube'
+  | 'pads'
+  | 'setlists'
+  | 'harmonize';
 
 type Props = {
   onOpenFeature: (feature: AppFeature) => void;
@@ -58,6 +65,14 @@ const features: Array<{
     subtitle: 'Sons e loops',
     tint: '#F3EFFF',
     accent: colors.purple
+  },
+  {
+    key: 'harmonize',
+    icon: 'H',
+    title: 'Harmonizar',
+    subtitle: 'Tom e campo harmônico',
+    tint: '#ECF8EF',
+    accent: colors.greenDark
   },
   {
     key: 'setlists',
