@@ -1,5 +1,7 @@
 export type SongSearchResult = {
   id: string;
+  provider: string;
+  externalId?: string;
   title: string;
   artist: string;
   originalKey?: string;
@@ -7,14 +9,41 @@ export type SongSearchResult = {
   capo?: number;
   sourceLabel: string;
   sourceUrl?: string;
-  provider: 'curated' | 'musicbrainz';
 };
 
-export type SetlistSong = SongSearchResult & {
-  setlistItemId: string;
-  selectedKey?: string;
-  notes?: string;
+export type SongChartLine = {
+  chord?: string;
+  text: string;
 };
+
+export type SongChartSection = {
+  title: string;
+  introChords?: string[];
+  lines: SongChartLine[];
+};
+
+export type SongChart = {
+  songId: string;
+  availability:
+    | 'available'
+    | 'unavailable';
+  key?: string;
+  shapeKey?: string;
+  capo?: number;
+  tuning?: string;
+  chords: string[];
+  sections: SongChartSection[];
+  sourceLabel?: string;
+  sourceUrl?: string;
+  message?: string;
+};
+
+export type SetlistSong =
+  SongSearchResult & {
+    setlistItemId: string;
+    selectedKey?: string;
+    notes?: string;
+  };
 
 export type Setlist = {
   id: string;

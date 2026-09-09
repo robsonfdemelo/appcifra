@@ -1,121 +1,162 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View
+} from 'react-native';
 import { useAudioPlayer } from 'expo-audio';
-import { ScreenHeader } from '../components/ScreenHeader';
-import { colors } from '../theme';
-import { preparePlaybackAudio, recoverPlaybackAudio, releaseAudioSession } from '../audio/session';
 
-type Props = { onBack: () => void };
+import {
+  preparePlaybackAudio,
+  recoverPlaybackAudio,
+  releaseAudioSession
+} from '../audio/session';
 
-type KeyPad = {
-  id: string;
-  label: string;
-  file: number;
+type Props = {
+  onBack: () => void;
 };
 
-const keyPads: KeyPad[] = [
-  { id: 'C', label: 'C', file: require('../../assets/ambient-keypads/C.wav') },
-  { id: 'Cs', label: 'C#', file: require('../../assets/ambient-keypads/Cs.wav') },
-  { id: 'D', label: 'D', file: require('../../assets/ambient-keypads/D.wav') },
-  { id: 'Ds', label: 'D#', file: require('../../assets/ambient-keypads/Ds.wav') },
-  { id: 'E', label: 'E', file: require('../../assets/ambient-keypads/E.wav') },
-  { id: 'F', label: 'F', file: require('../../assets/ambient-keypads/F.wav') },
-  { id: 'Fs', label: 'F#', file: require('../../assets/ambient-keypads/Fs.wav') },
-  { id: 'G', label: 'G', file: require('../../assets/ambient-keypads/G.wav') },
-  { id: 'Gs', label: 'G#', file: require('../../assets/ambient-keypads/Gs.wav') },
-  { id: 'A', label: 'A', file: require('../../assets/ambient-keypads/A.wav') },
-  { id: 'As', label: 'A#', file: require('../../assets/ambient-keypads/As.wav') },
-  { id: 'B', label: 'B', file: require('../../assets/ambient-keypads/B.wav') }
-];
+type Tab = 'ambient' | 'performance';
+type Preset = 'Worship' | 'Warm' | 'Deep';
 
-const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(() => resolve(), ms));
+const ambientPads = [
+  { id: 'C', label: 'C', file: require('../../assets/ambient-keypads-light/C.wav') },
+  { id: 'Cs', label: 'C#', file: require('../../assets/ambient-keypads-light/Cs.wav') },
+  { id: 'D', label: 'D', file: require('../../assets/ambient-keypads-light/D.wav') },
+  { id: 'Ds', label: 'D#', file: require('../../assets/ambient-keypads-light/Ds.wav') },
+  { id: 'E', label: 'E', file: require('../../assets/ambient-keypads-light/E.wav') },
+  { id: 'F', label: 'F', file: require('../../assets/ambient-keypads-light/F.wav') },
+  { id: 'Fs', label: 'F#', file: require('../../assets/ambient-keypads-light/Fs.wav') },
+  { id: 'G', label: 'G', file: require('../../assets/ambient-keypads-light/G.wav') },
+  { id: 'Gs', label: 'G#', file: require('../../assets/ambient-keypads-light/Gs.wav') },
+  { id: 'A', label: 'A', file: require('../../assets/ambient-keypads-light/A.wav') },
+  { id: 'As', label: 'A#', file: require('../../assets/ambient-keypads-light/As.wav') },
+  { id: 'B', label: 'B', file: require('../../assets/ambient-keypads-light/B.wav') }
+] as const;
+
+const performancePads = [
+  { id: 'longImpact', label: 'Long Impact', short: 'IMPACT', duration: '4s', file: require('../../assets/performance-pads-long/long-impact.wav') },
+  { id: 'subDrop', label: 'Sub Drop', short: 'SUB', duration: '4.5s', file: require('../../assets/performance-pads-long/sub-drop-long.wav') },
+  { id: 'riser', label: 'Riser', short: 'RISER', duration: '5s', file: require('../../assets/performance-pads-long/riser-long.wav') },
+  { id: 'reverse', label: 'Reverse', short: 'REV', duration: '4s', file: require('../../assets/performance-pads-long/reverse-long.wav') },
+  { id: 'swell', label: 'Cymbal Swell', short: 'SWELL', duration: '5.5s', file: require('../../assets/performance-pads-long/swell-long.wav') },
+  { id: 'shimmer', label: 'Shimmer Tail', short: 'SHIMMER', duration: '5s', file: require('../../assets/performance-pads-long/shimmer-tail.wav') },
+  { id: 'atmosphere', label: 'Atmosphere', short: 'ATMOS', duration: '6s', file: require('../../assets/performance-pads-long/atmosphere.wav') },
+  { id: 'transition', label: 'Transition', short: 'TRANS', duration: '4.5s', file: require('../../assets/performance-pads-long/transition.wav') },
+  { id: 'airSweep', label: 'Air Sweep', short: 'AIR', duration: '4s', file: require('../../assets/performance-pads-long/air-sweep.wav') },
+  { id: 'buildUp', label: 'Build Up', short: 'BUILD', duration: '5s', file: require('../../assets/performance-pads-long/build-up.wav') },
+  { id: 'release', label: 'Release', short: 'REL', duration: '4s', file: require('../../assets/performance-pads-long/release.wav') },
+  { id: 'cinematicHit', label: 'Cinematic Hit', short: 'CINE', duration: '4.5s', file: require('../../assets/performance-pads-long/cinematic-hit.wav') }
+] as const;
+
+const sleep = (ms: number) =>
+  new Promise<void>(resolve => setTimeout(resolve, ms));
 
 export function PadsScreen({ onBack }: Props) {
+  const [tab, setTab] = useState<Tab>('ambient');
   const [activeKey, setActiveKey] = useState('C');
   const [playing, setPlaying] = useState(false);
-  const [volume, setVolume] = useState(4);
   const [transitioning, setTransitioning] = useState(false);
+  const [preset, setPreset] = useState<Preset>('Worship');
+  const [intensity, setIntensity] = useState(4);
+  const [lastHit, setLastHit] = useState<string | null>(null);
 
-  const c = useAudioPlayer(keyPads[0]!.file, { downloadFirst: true, keepAudioSessionActive: true });
-  const cs = useAudioPlayer(keyPads[1]!.file, { downloadFirst: true, keepAudioSessionActive: true });
-  const d = useAudioPlayer(keyPads[2]!.file, { downloadFirst: true, keepAudioSessionActive: true });
-  const ds = useAudioPlayer(keyPads[3]!.file, { downloadFirst: true, keepAudioSessionActive: true });
-  const e = useAudioPlayer(keyPads[4]!.file, { downloadFirst: true, keepAudioSessionActive: true });
-  const f = useAudioPlayer(keyPads[5]!.file, { downloadFirst: true, keepAudioSessionActive: true });
-  const fs = useAudioPlayer(keyPads[6]!.file, { downloadFirst: true, keepAudioSessionActive: true });
-  const g = useAudioPlayer(keyPads[7]!.file, { downloadFirst: true, keepAudioSessionActive: true });
-  const gs = useAudioPlayer(keyPads[8]!.file, { downloadFirst: true, keepAudioSessionActive: true });
-  const a = useAudioPlayer(keyPads[9]!.file, { downloadFirst: true, keepAudioSessionActive: true });
-  const as = useAudioPlayer(keyPads[10]!.file, { downloadFirst: true, keepAudioSessionActive: true });
-  const b = useAudioPlayer(keyPads[11]!.file, { downloadFirst: true, keepAudioSessionActive: true });
+  const c = useAudioPlayer(ambientPads[0].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const cs = useAudioPlayer(ambientPads[1].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const d = useAudioPlayer(ambientPads[2].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const ds = useAudioPlayer(ambientPads[3].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const e = useAudioPlayer(ambientPads[4].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const f = useAudioPlayer(ambientPads[5].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const fs = useAudioPlayer(ambientPads[6].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const g = useAudioPlayer(ambientPads[7].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const gs = useAudioPlayer(ambientPads[8].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const a = useAudioPlayer(ambientPads[9].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const as = useAudioPlayer(ambientPads[10].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const b = useAudioPlayer(ambientPads[11].file, { downloadFirst: true, keepAudioSessionActive: true });
 
-  const players = useMemo(
+  const longImpact = useAudioPlayer(performancePads[0].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const subDrop = useAudioPlayer(performancePads[1].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const riser = useAudioPlayer(performancePads[2].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const reverse = useAudioPlayer(performancePads[3].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const swell = useAudioPlayer(performancePads[4].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const shimmer = useAudioPlayer(performancePads[5].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const atmosphere = useAudioPlayer(performancePads[6].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const transition = useAudioPlayer(performancePads[7].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const airSweep = useAudioPlayer(performancePads[8].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const buildUp = useAudioPlayer(performancePads[9].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const release = useAudioPlayer(performancePads[10].file, { downloadFirst: true, keepAudioSessionActive: true });
+  const cinematicHit = useAudioPlayer(performancePads[11].file, { downloadFirst: true, keepAudioSessionActive: true });
+
+  const ambientPlayers = useMemo(
     () => ({ C: c, Cs: cs, D: d, Ds: ds, E: e, F: f, Fs: fs, G: g, Gs: gs, A: a, As: as, B: b }),
     [c, cs, d, ds, e, f, fs, g, gs, a, as, b]
   );
 
-  const targetVolume = volume / 5;
+  const performancePlayers = useMemo(
+    () => ({ longImpact, subDrop, riser, reverse, swell, shimmer, atmosphere, transition, airSweep, buildUp, release, cinematicHit }),
+    [longImpact, subDrop, riser, reverse, swell, shimmer, atmosphere, transition, airSweep, buildUp, release, cinematicHit]
+  );
+
+  const targetVolume = Math.min(1, 0.12 + intensity * 0.15);
 
   useEffect(() => {
     preparePlaybackAudio().catch(() => undefined);
 
     return () => {
-      Object.values(players).forEach(player => {
-        try {
-          player.pause();
-        } catch {}
+      Object.values(ambientPlayers).forEach(player => {
+        try { player.pause(); } catch {}
       });
+
+      Object.values(performancePlayers).forEach(player => {
+        try { player.pause(); } catch {}
+      });
+
       releaseAudioSession().catch(() => undefined);
     };
-  }, []);
+  }, [ambientPlayers, performancePlayers]);
 
   useEffect(() => {
-    Object.values(players).forEach(player => {
-      player.volume = targetVolume;
+    Object.values(ambientPlayers).forEach(player => {
       player.loop = true;
+      player.volume = targetVolume;
     });
-  }, [players, targetVolume]);
 
-  async function fadePlayer(
-    player: (typeof players)[keyof typeof players],
+    Object.values(performancePlayers).forEach(player => {
+      player.loop = false;
+      player.volume = Math.min(1, targetVolume + 0.05);
+    });
+  }, [ambientPlayers, performancePlayers, targetVolume]);
+
+  async function fade(
+    player: (typeof ambientPlayers)[keyof typeof ambientPlayers],
     from: number,
     to: number,
-    duration = 1800
+    duration: number
   ) {
-    const steps = 24;
+    const steps = 14;
+
     for (let step = 0; step <= steps; step += 1) {
       player.volume = from + (to - from) * (step / steps);
       await sleep(duration / steps);
     }
   }
 
-  async function stopAll() {
-    const activePlayers = Object.values(players);
-    await Promise.all(
-      activePlayers.map(async player => {
-        try {
-          await fadePlayer(player, player.volume ?? targetVolume, 0, 700);
-          player.pause();
-          await player.seekTo(0);
-          player.volume = targetVolume;
-        } catch {}
-      })
-    );
-    setPlaying(false);
-  }
-
-  async function switchPad(id: string) {
+  async function selectAmbient(id: string) {
     if (transitioning) return;
-    setTransitioning(true);
 
-    const next = players[id as keyof typeof players];
-    const current = players[activeKey as keyof typeof players];
+    const next = ambientPlayers[id as keyof typeof ambientPlayers];
+    const current = ambientPlayers[activeKey as keyof typeof ambientPlayers];
+
+    setTransitioning(true);
 
     try {
       await preparePlaybackAudio();
 
       if (id === activeKey && playing) {
-        await fadePlayer(current, current.volume ?? targetVolume, 0, 900);
+        await fade(current, current.volume ?? targetVolume, 0, 380);
         current.pause();
         current.volume = targetVolume;
         setPlaying(false);
@@ -129,14 +170,15 @@ export function PadsScreen({ onBack }: Props) {
 
       if (playing) {
         await Promise.all([
-          fadePlayer(current, current.volume ?? targetVolume, 0, 2200),
-          fadePlayer(next, 0, targetVolume, 2200)
+          fade(current, current.volume ?? targetVolume, 0, 1000),
+          fade(next, 0, targetVolume, 1000)
         ]);
+
         current.pause();
         await current.seekTo(0);
         current.volume = targetVolume;
       } else {
-        await fadePlayer(next, 0, targetVolume, 1800);
+        await fade(next, 0, targetVolume, 760);
       }
 
       setActiveKey(id);
@@ -144,9 +186,8 @@ export function PadsScreen({ onBack }: Props) {
     } catch {
       try {
         await recoverPlaybackAudio();
-        await next.seekTo(0);
-        next.loop = true;
         next.volume = targetVolume;
+        next.loop = true;
         next.play();
         setActiveKey(id);
         setPlaying(true);
@@ -158,194 +199,498 @@ export function PadsScreen({ onBack }: Props) {
     }
   }
 
-  async function toggleCurrent() {
-    const player = players[activeKey as keyof typeof players];
-
-    if (playing) {
-      await fadePlayer(player, player.volume ?? targetVolume, 0, 900);
-      player.pause();
-      player.volume = targetVolume;
-      setPlaying(false);
-      return;
-    }
+  async function hitPerformancePad(id: string) {
+    const player =
+      performancePlayers[id as keyof typeof performancePlayers];
 
     try {
       await preparePlaybackAudio();
-      player.volume = 0;
+
+      // Tocar de novo reinicia o efeito do começo.
+      player.pause();
+      await player.seekTo(0);
+      player.volume = Math.min(1, targetVolume + 0.05);
       player.play();
-      await fadePlayer(player, 0, targetVolume, 1800);
-      setPlaying(true);
+
+      setLastHit(id);
+
+      setTimeout(() => {
+        setLastHit(current =>
+          current === id ? null : current
+        );
+      }, 260);
     } catch {
       try {
         await recoverPlaybackAudio();
-        player.volume = targetVolume;
+        await player.seekTo(0);
         player.play();
-        setPlaying(true);
-      } catch {
-        setPlaying(false);
-      }
+      } catch {}
     }
   }
 
-  const currentLabel = keyPads.find(item => item.id === activeKey)?.label ?? activeKey;
+  const currentLabel =
+    ambientPads.find(item => item.id === activeKey)?.label ?? activeKey;
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <ScreenHeader title="Pads" onBack={onBack} />
+      <View style={styles.screen}>
+        <View style={styles.topBar}>
+          <Pressable onPress={onBack} style={styles.backButton}>
+            <Text style={styles.backText}>‹</Text>
+          </Pressable>
 
-        <View style={styles.heroCard}>
-          <View style={styles.heroTopRow}>
-            <View>
-              <Text style={styles.heroEyebrow}>WORSHIP / AMBIENT</Text>
-              <Text style={styles.heroTitle}>Peaceful Atmosphere</Text>
-            </View>
-            <View style={styles.ambientBadge}>
-              <Text style={styles.ambientBadgeText}>AMBIENT</Text>
-            </View>
+          <View style={styles.titleBox}>
+            <Text style={styles.title}>Performance Pads</Text>
+            <Text style={styles.subtitle}>AMBIENT + LONG FX</Text>
           </View>
 
-          <Text style={styles.heroKey}>{currentLabel}</Text>
-          <Text style={styles.heroText}>
-            Pad contínuo, macio e profundo para preencher a música com ambiência sem competir com voz ou instrumento.
-          </Text>
+          <View style={styles.topSpacer} />
         </View>
 
-        <View style={styles.modeRow}>
-          <View style={[styles.modeChip, styles.modeChipActive]}>
-            <Text style={styles.modeChipActiveText}>Peaceful</Text>
-          </View>
-          <View style={styles.modeChip}><Text style={styles.modeChipText}>Worship</Text></View>
-          <View style={styles.modeChip}><Text style={styles.modeChipText}>Warm</Text></View>
-        </View>
-
-        <View style={styles.sectionHeader}>
-          <View>
-            <Text style={styles.sectionTitle}>Escolha o tom</Text>
-            <Text style={styles.sectionSubtitle}>A troca de tonalidade usa crossfade longo e suave.</Text>
-          </View>
-          <Text style={styles.keyCount}>12 TONS</Text>
-        </View>
-
-        <View style={styles.padGrid}>
-          {keyPads.map(item => {
-            const active = item.id === activeKey;
-            return (
-              <Pressable
-                key={item.id}
-                onPress={() => switchPad(item.id)}
-                disabled={transitioning}
-                style={[styles.pad, active ? styles.padActive : null]}
-              >
-                <Text style={[styles.padLabel, active ? styles.padLabelActive : null]}>{item.label}</Text>
-                <Text style={[styles.padMeta, active ? styles.padMetaActive : null]}>
-                  {active && playing ? 'TOCANDO' : active ? 'SELECIONADO' : 'AMBIENT'}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <View style={styles.nowCard}>
-          <View>
-            <Text style={styles.nowLabel}>PAD ATUAL</Text>
-            <Text style={styles.nowValue}>{currentLabel} · Peaceful</Text>
-          </View>
-          <View style={styles.livePill}>
-            <View style={[styles.liveDot, !playing ? styles.liveDotOff : null]} />
-            <Text style={styles.liveText}>
-              {transitioning ? 'TRANSIÇÃO' : playing ? 'ATIVO' : 'PAUSADO'}
+        <View style={styles.tabs}>
+          <Pressable
+            onPress={() => setTab('ambient')}
+            style={[
+              styles.tabButton,
+              tab === 'ambient' && styles.tabButtonActive
+            ]}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                tab === 'ambient' && styles.tabTextActive
+              ]}
+            >
+              Ambient
             </Text>
-          </View>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setTab('performance')}
+            style={[
+              styles.tabButton,
+              tab === 'performance' && styles.tabButtonActive
+            ]}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                tab === 'performance' && styles.tabTextActive
+              ]}
+            >
+              Long FX
+            </Text>
+          </Pressable>
         </View>
 
-        <View style={styles.transportCard}>
-          <View style={styles.transportRow}>
-            <Pressable style={styles.playButton} onPress={toggleCurrent} disabled={transitioning}>
-              <Text style={styles.playButtonText}>{playing ? 'Ⅱ' : '▶'}</Text>
-            </Pressable>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.content}
+        >
+          {tab === 'ambient' ? (
+            <>
+              <View style={styles.hero}>
+                <View>
+                  <Text style={styles.heroSmall}>TONALIDADE ATUAL</Text>
+                  <Text style={styles.heroKey}>{currentLabel}</Text>
+                </View>
 
-            <Pressable style={styles.stopButton} onPress={stopAll} disabled={transitioning}>
-              <Text style={styles.stopText}>■</Text>
-            </Pressable>
+                <Text style={styles.heroState}>
+                  {transitioning
+                    ? 'TRANSIÇÃO'
+                    : playing
+                      ? 'TOCANDO'
+                      : 'PRONTO'}
+                </Text>
+              </View>
 
-            <View style={styles.volumeArea}>
-              <Text style={styles.volumeLabel}>INTENSIDADE</Text>
-              <View style={styles.volumeBars}>
-                {Array.from({ length: 5 }).map((_, index) => (
+              <View style={styles.presetRow}>
+                {(['Worship', 'Warm', 'Deep'] as Preset[]).map(item => (
                   <Pressable
-                    key={index}
+                    key={item}
+                    onPress={() => setPreset(item)}
                     style={[
-                      styles.volumeBar,
-                      index < volume ? styles.volumeBarActive : null,
-                      { height: 9 + index * 4 }
+                      styles.preset,
+                      preset === item && styles.presetActive
                     ]}
-                    onPress={() => setVolume(index + 1)}
-                  />
+                  >
+                    <Text
+                      style={[
+                        styles.presetText,
+                        preset === item && styles.presetTextActive
+                      ]}
+                    >
+                      {item}
+                    </Text>
+                  </Pressable>
                 ))}
               </View>
+
+              <Text style={styles.sectionTitle}>Escolha o tom</Text>
+
+              <View style={styles.ambientGrid}>
+                {ambientPads.map(item => {
+                  const active = item.id === activeKey;
+
+                  return (
+                    <Pressable
+                      key={item.id}
+                      onPress={() => selectAmbient(item.id)}
+                      style={[
+                        styles.ambientPad,
+                        active && styles.ambientPadActive,
+                        active && playing && styles.ambientPadPlaying
+                      ]}
+                    >
+                      <Text style={styles.padMainText}>{item.label}</Text>
+                      <Text style={styles.padMeta}>
+                        {active && playing
+                          ? 'PLAYING'
+                          : preset.toUpperCase()}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={styles.fxHero}>
+                <Text style={styles.fxEyebrow}>LONG PERFORMANCE FX</Text>
+                <Text style={styles.fxTitle}>Sons sustentados</Text>
+                <Text style={styles.fxText}>
+                  Efeitos de 4 a 6 segundos para transições, entradas e momentos de impacto.
+                </Text>
+              </View>
+
+              <View style={styles.fxGrid}>
+                {performancePads.map(item => {
+                  const hit = lastHit === item.id;
+
+                  return (
+                    <Pressable
+                      key={item.id}
+                      onPress={() => hitPerformancePad(item.id)}
+                      style={({ pressed }) => [
+                        styles.fxPad,
+                        (pressed || hit) && styles.fxPadHit
+                      ]}
+                    >
+                      <Text style={styles.fxShort}>{item.short}</Text>
+                      <Text style={styles.fxLabel}>{item.label}</Text>
+                      <Text style={styles.fxDuration}>{item.duration}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <View style={styles.tipCard}>
+                <Text style={styles.tipTitle}>Camadas independentes</Text>
+                <Text style={styles.tipText}>
+                  Um efeito não precisa cortar o Ambient. Tocar novamente no mesmo FX reinicia o som do começo.
+                </Text>
+              </View>
+            </>
+          )}
+
+          <View style={styles.intensityCard}>
+            <Text style={styles.intensityTitle}>INTENSIDADE</Text>
+
+            <View style={styles.intensityBars}>
+              {[1, 2, 3, 4, 5].map(value => (
+                <Pressable
+                  key={value}
+                  onPress={() => setIntensity(value)}
+                  style={[
+                    styles.intensityBar,
+                    value <= intensity && styles.intensityBarActive,
+                    { height: 8 + value * 5 }
+                  ]}
+                />
+              ))}
             </View>
           </View>
-        </View>
-
-        <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>Worship Ambient original do App Cifra</Text>
-          <Text style={styles.infoText}>
-            Texturas originais com tônica, quinta, oitava, estéreo amplo, movimento lento e entrada suave.
-            A troca entre tons usa cerca de 2,2 segundos de crossfade para evitar cortes secos.
-          </Text>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#FFFFFF' },
-  content: { paddingHorizontal: 18, paddingBottom: 36 },
-  heroCard: { marginTop: 10, borderRadius: 24, padding: 20, backgroundColor: '#0B1E17' },
-  heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  heroEyebrow: { color: '#7FE0A1', fontSize: 10, fontWeight: '900', letterSpacing: 1.7 },
-  heroTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '900', marginTop: 5 },
-  ambientBadge: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#153B2A' },
-  ambientBadgeText: { color: '#88E1A7', fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
-  heroKey: { color: '#FFFFFF', fontSize: 58, fontWeight: '900', marginTop: 17 },
-  heroText: { color: '#C7D5CE', fontSize: 13, lineHeight: 19, marginTop: 4 },
-  modeRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
-  modeChip: { borderRadius: 999, paddingHorizontal: 13, paddingVertical: 9, backgroundColor: '#F3F5F4', borderWidth: 1, borderColor: colors.border },
-  modeChipActive: { backgroundColor: '#E9F8EE', borderColor: '#BDE4CA' },
-  modeChipText: { color: '#87928D', fontSize: 11, fontWeight: '800' },
-  modeChipActiveText: { color: colors.greenDark, fontSize: 11, fontWeight: '900' },
-  sectionHeader: { marginTop: 22, marginBottom: 10, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 },
-  sectionTitle: { color: colors.ink, fontSize: 18, fontWeight: '900' },
-  sectionSubtitle: { color: colors.muted, fontSize: 11, marginTop: 3 },
-  keyCount: { color: colors.greenDark, fontSize: 9, fontWeight: '900', letterSpacing: 1.3 },
-  padGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  pad: { width: '31.4%', minHeight: 88, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: '#F8FAF9', alignItems: 'center', justifyContent: 'center' },
-  padActive: { backgroundColor: colors.green, borderColor: colors.green },
-  padLabel: { color: colors.ink, fontSize: 22, fontWeight: '900' },
-  padLabelActive: { color: '#FFFFFF' },
-  padMeta: { color: '#9AA5A0', fontSize: 8, letterSpacing: 1.1, fontWeight: '900', marginTop: 7 },
-  padMetaActive: { color: '#DDF8E6' },
-  nowCard: { marginTop: 16, minHeight: 82, borderRadius: 18, backgroundColor: '#F8FAF9', paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  nowLabel: { color: '#98A2A0', fontSize: 9, letterSpacing: 1.4, fontWeight: '900' },
-  nowValue: { color: colors.ink, fontSize: 22, fontWeight: '900', marginTop: 3 },
-  livePill: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 999, backgroundColor: '#ECF8EF' },
-  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.green },
-  liveDotOff: { backgroundColor: '#AAB3AF' },
-  liveText: { color: colors.greenDark, fontSize: 9, fontWeight: '900', letterSpacing: 0.7 },
-  transportCard: { borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: 15, marginTop: 12 },
-  transportRow: { flexDirection: 'row', alignItems: 'center' },
-  playButton: { width: 58, height: 58, borderRadius: 29, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
-  playButtonText: { color: '#FFF', fontSize: 24, fontWeight: '900' },
-  stopButton: { width: 58, height: 58, borderRadius: 29, backgroundColor: '#F0F2F1', alignItems: 'center', justifyContent: 'center', marginLeft: 12 },
-  stopText: { color: colors.ink, fontSize: 19 },
-  volumeArea: { marginLeft: 'auto', alignItems: 'flex-end' },
-  volumeLabel: { color: colors.muted, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
-  volumeBars: { flexDirection: 'row', alignItems: 'flex-end', gap: 5, height: 28, marginTop: 8 },
-  volumeBar: { width: 8, borderRadius: 4, backgroundColor: '#E1E6E3' },
-  volumeBarActive: { backgroundColor: colors.green },
-  infoCard: { borderRadius: 18, backgroundColor: '#F1F9F3', borderWidth: 1, borderColor: '#D8EBDD', padding: 15, marginTop: 16 },
-  infoTitle: { color: colors.ink, fontSize: 14, fontWeight: '900' },
-  infoText: { color: colors.muted, fontSize: 12, lineHeight: 19, marginTop: 5 }
+  safe: { flex: 1, backgroundColor: '#080512' },
+  screen: { flex: 1, backgroundColor: '#080512' },
+
+  topBar: {
+    minHeight: 64,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  backButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#171025',
+    borderWidth: 1,
+    borderColor: '#392A5F',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  backText: {
+    color: '#FFFFFF',
+    fontSize: 36,
+    lineHeight: 38,
+    marginTop: -4
+  },
+  titleBox: { flex: 1, alignItems: 'center' },
+  title: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },
+  subtitle: {
+    color: '#8F7DE0',
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    marginTop: 2
+  },
+  topSpacer: { width: 46 },
+
+  tabs: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 18,
+    marginBottom: 10
+  },
+  tabButton: {
+    flex: 1,
+    height: 44,
+    borderRadius: 15,
+    backgroundColor: '#15101D',
+    borderWidth: 1,
+    borderColor: '#2C2337',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  tabButtonActive: {
+    backgroundColor: '#3A2D77',
+    borderColor: '#806DFF'
+  },
+  tabText: { color: '#777080', fontWeight: '900' },
+  tabTextActive: { color: '#FFFFFF' },
+
+  content: { paddingHorizontal: 18, paddingBottom: 34 },
+
+  hero: {
+    minHeight: 145,
+    borderRadius: 24,
+    padding: 20,
+    backgroundColor: '#161025',
+    borderWidth: 1,
+    borderColor: '#392A5F',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  heroSmall: {
+    color: '#9388A9',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.4
+  },
+  heroKey: {
+    color: '#FFFFFF',
+    fontSize: 64,
+    fontWeight: '900',
+    lineHeight: 72
+  },
+  heroState: {
+    color: '#CBC2FF',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1
+  },
+
+  presetRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12
+  },
+  preset: {
+    flex: 1,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#15101D',
+    borderWidth: 1,
+    borderColor: '#2B2334',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  presetActive: {
+    backgroundColor: '#392E70',
+    borderColor: '#806DFF'
+  },
+  presetText: {
+    color: '#756D7F',
+    fontWeight: '800'
+  },
+  presetTextActive: {
+    color: '#FFFFFF'
+  },
+
+  sectionTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '900',
+    marginTop: 22,
+    marginBottom: 12
+  },
+
+  ambientGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10
+  },
+  ambientPad: {
+    width: '31.4%',
+    minHeight: 102,
+    borderRadius: 22,
+    backgroundColor: '#15101D',
+    borderWidth: 1,
+    borderColor: '#2B2335',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  ambientPadActive: {
+    backgroundColor: '#251C46',
+    borderColor: '#6F5ED0'
+  },
+  ambientPadPlaying: {
+    backgroundColor: '#413388',
+    borderColor: '#9787FF'
+  },
+  padMainText: {
+    color: '#FFFFFF',
+    fontSize: 25,
+    fontWeight: '900'
+  },
+  padMeta: {
+    color: '#9D93AB',
+    fontSize: 7,
+    fontWeight: '900',
+    letterSpacing: 1,
+    marginTop: 7
+  },
+
+  fxHero: {
+    borderRadius: 24,
+    backgroundColor: '#161025',
+    borderWidth: 1,
+    borderColor: '#392A5F',
+    padding: 20
+  },
+  fxEyebrow: {
+    color: '#9D8DFF',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.6
+  },
+  fxTitle: {
+    color: '#FFFFFF',
+    fontSize: 28,
+    fontWeight: '900',
+    marginTop: 6
+  },
+  fxText: {
+    color: '#9F97A8',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 6
+  },
+
+  fxGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 14
+  },
+  fxPad: {
+    width: '48.5%',
+    minHeight: 132,
+    borderRadius: 24,
+    backgroundColor: '#181121',
+    borderWidth: 1,
+    borderColor: '#32263D',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  fxPadHit: {
+    backgroundColor: '#6549C8',
+    borderColor: '#B0A2FF',
+    transform: [{ scale: 0.97 }]
+  },
+  fxShort: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '900'
+  },
+  fxLabel: {
+    color: '#9D93A7',
+    fontSize: 10,
+    fontWeight: '800',
+    marginTop: 6
+  },
+  fxDuration: {
+    color: '#7B6FCC',
+    fontSize: 9,
+    fontWeight: '900',
+    marginTop: 5
+  },
+
+  tipCard: {
+    borderRadius: 18,
+    backgroundColor: '#13101A',
+    borderWidth: 1,
+    borderColor: '#2C2434',
+    padding: 14,
+    marginTop: 14
+  },
+  tipTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900'
+  },
+  tipText: {
+    color: '#7D7685',
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 4
+  },
+
+  intensityCard: {
+    borderRadius: 18,
+    backgroundColor: '#13101A',
+    borderWidth: 1,
+    borderColor: '#2C2434',
+    padding: 14,
+    marginTop: 14
+  },
+  intensityTitle: {
+    color: '#817887',
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 1.2
+  },
+  intensityBars: {
+    height: 40,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    marginTop: 6
+  },
+  intensityBar: {
+    flex: 1,
+    borderRadius: 6,
+    backgroundColor: '#2A2430'
+  },
+  intensityBarActive: {
+    backgroundColor: '#745FE1'
+  }
 });

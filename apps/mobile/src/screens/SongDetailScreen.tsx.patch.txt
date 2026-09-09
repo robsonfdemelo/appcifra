@@ -1,0 +1,11 @@
+No arquivo apps/mobile/src/screens/SongDetailScreen.tsx:
+
+troque:
+
+loadSongChart(song.id)
+
+por:
+
+loadSongChart(song)
+
+Não altere o restante da tela.

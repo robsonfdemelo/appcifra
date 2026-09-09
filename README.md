@@ -30,3 +30,11 @@ pnpm install --force
 pnpm --filter @app-cifra/mobile exec tsc --noEmit
 pnpm --filter @app-cifra/mobile start
 ```
+
+## Busca + Setlists (fase atual)
+- Busca de música/artista por metadados (MusicBrainz), com fallback local.
+- Resultado preserva fonte/link externo da cifra, sem copiar automaticamente letra/cifra de terceiros.
+- Exemplo curado: "Só Tu És Santo" (MORADA), com tom/capo e link da fonte.
+- Setlists locais persistidos com AsyncStorage.
+- Adicionar música a setlist, criar setlist, remover e reordenar músicas.
+- Tela de música com transposição de tom e atalho para Pads.
