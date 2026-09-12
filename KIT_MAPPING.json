@@ -1,0 +1,54 @@
+{
+  "kit": "App Cifra Pro Free Kit 01",
+  "source": "Arquivos enviados pelo usuário em pads.zip",
+  "pads": [
+    {
+      "file": "kick.wav",
+      "label": "Kick",
+      "original": "kicks/Kick Live Drop.mp3",
+      "note": "Kick equilibrado, com grave forte sem ficar excessivamente sub."
+    },
+    {
+      "file": "clap.wav",
+      "label": "Clap",
+      "original": "clap/Clap Stadium.mp3",
+      "note": "Clap mais aberto e presente para performance ao vivo."
+    },
+    {
+      "file": "low-perc.wav",
+      "label": "Low Perc",
+      "original": "808/808 Boogeyman.wav",
+      "note": "Grave/sub longo para entradas e marcações."
+    },
+    {
+      "file": "tom.wav",
+      "label": "Tom",
+      "original": "toms/Tom War Drum.mp3",
+      "note": "Tom grave com cauda mais musical e menos eletrônico."
+    },
+    {
+      "file": "swell.wav",
+      "label": "Swell / Crash",
+      "original": "crash/Crash Wipeout.mp3",
+      "note": "Crash longo, com cerca de 5 s de cauda."
+    },
+    {
+      "file": "impact.wav",
+      "label": "Impact",
+      "original": "misc/Cinematic Hit Titan.mp3",
+      "note": "Impact cinematográfico grave e longo."
+    },
+    {
+      "file": "fx-perc.wav",
+      "label": "FX Perc",
+      "original": "misc/Cinematic Hit Blockbuster.mp3",
+      "note": "Hit com mais conteúdo médio/agudo para contraste."
+    },
+    {
+      "file": "transition.wav",
+      "label": "Transition",
+      "original": "misc/Cinematic Hit Vertigo.mp3",
+      "note": "FX longo para transições e preenchimentos."
+    }
+  ]
+}

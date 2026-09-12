@@ -24,6 +24,7 @@ import {
 } from '@app-cifra/music-theory';
 
 import { ChordDiagram } from '../components/ChordDiagram';
+import { ChordContextSheet } from '../components/ChordContextSheet';
 import { getExternalCifraSources } from '../music/providers/externalCifraSources';
 import { loadSongChart } from '../music/songContent';
 import {
@@ -69,9 +70,11 @@ function getDisplayChord(chord: string, offset: number) {
 }
 
 function CompactChordStrip({
-  chords
+  chords,
+  onChordPress
 }: {
   chords: ChordCard[];
+  onChordPress: (chord: string) => void;
 }) {
   return (
     <ScrollView
@@ -80,14 +83,15 @@ function CompactChordStrip({
       contentContainerStyle={styles.compactChordRow}
     >
       {chords.map(item => (
-        <View
+        <Pressable
           key={item.sourceChord}
           style={styles.compactChordChip}
+          onPress={() => onChordPress(item.chord)}
         >
           <Text style={styles.compactChordText}>
             {item.chord}
           </Text>
-        </View>
+        </Pressable>
       ))}
     </ScrollView>
   );
@@ -129,6 +133,7 @@ export function SongDetailScreen({
   const [stageMode, setStageMode] = useState(false);
   const [viewportHeight, setViewportHeight] = useState(0);
   const [contentHeight, setContentHeight] = useState(0);
+  const [contextChord, setContextChord] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -311,7 +316,10 @@ export function SongDetailScreen({
             </View>
           </View>
 
-          <CompactChordStrip chords={chordCards} />
+          <CompactChordStrip
+            chords={chordCards}
+            onChordPress={setContextChord}
+          />
         </View>
       ) : null}
 
@@ -443,9 +451,10 @@ export function SongDetailScreen({
                   contentContainerStyle={styles.chordsRow}
                 >
                   {chordCards.map(item => (
-                    <View
+                    <Pressable
                       key={item.sourceChord}
                       style={styles.chordCard}
+                      onPress={() => setContextChord(item.chord)}
                     >
                       <Text style={styles.chordName}>
                         {item.chord}
@@ -464,7 +473,7 @@ export function SongDetailScreen({
                           </Text>
                         </View>
                       )}
-                    </View>
+                    </Pressable>
                   ))}
                 </ScrollView>
               </>
@@ -533,6 +542,7 @@ export function SongDetailScreen({
                 chart={chart}
                 offset={offset}
                 stageMode={stageMode}
+                onChordPress={setContextChord}
               />
             ) : (
               <View style={styles.unavailableContent}>
@@ -722,18 +732,68 @@ export function SongDetailScreen({
           </Pressable>
         </View>
       ) : null}
+
+      <ChordContextSheet
+        visible={!!contextChord}
+        chord={contextChord}
+        currentKey={selectedKey}
+        onClose={() => setContextChord(null)}
+      />
     </View>
+  );
+}
+
+function ChordTextLine({
+  value,
+  offset,
+  stageMode,
+  onChordPress
+}: {
+  value: string;
+  offset: number;
+  stageMode: boolean;
+  onChordPress: (chord: string) => void;
+}) {
+  const parts = value.split(/(\s+)/);
+
+  return (
+    <Text
+      style={[
+        styles.chordLine,
+        stageMode && styles.stageChordLine
+      ]}
+    >
+      {parts.map((part, index) => {
+        if (!part || /^\s+$/.test(part)) {
+          return part;
+        }
+
+        const displayed = getDisplayChord(part, offset);
+
+        return (
+          <Text
+            key={`${part}-${index}`}
+            onPress={() => onChordPress(displayed)}
+            style={styles.touchableChordText}
+          >
+            {displayed}
+          </Text>
+        );
+      })}
+    </Text>
   );
 }
 
 function CifraSections({
   chart,
   offset,
-  stageMode
+  stageMode,
+  onChordPress
 }: {
   chart: SongChart;
   offset: number;
   stageMode: boolean;
+  onChordPress: (chord: string) => void;
 }) {
   return (
     <>
@@ -752,16 +812,12 @@ function CifraSections({
           </Text>
 
           {section.introChords?.length ? (
-            <Text
-              style={[
-                styles.chordLine,
-                stageMode && styles.stageChordLine
-              ]}
-            >
-              {section.introChords
-                .map(chord => getDisplayChord(chord, offset))
-                .join('   ')}
-            </Text>
+            <ChordTextLine
+              value={section.introChords.join('   ')}
+              offset={offset}
+              stageMode={stageMode}
+              onChordPress={onChordPress}
+            />
           ) : null}
 
           {section.lines.map((line, index) => (
@@ -770,14 +826,12 @@ function CifraSections({
               style={styles.lyricBlock}
             >
               {line.chord ? (
-                <Text
-                  style={[
-                    styles.chordLine,
-                    stageMode && styles.stageChordLine
-                  ]}
-                >
-                  {getDisplayChord(line.chord, offset)}
-                </Text>
+                <ChordTextLine
+                  value={line.chord}
+                  offset={offset}
+                  stageMode={stageMode}
+                  onChordPress={onChordPress}
+                />
               ) : null}
 
               <Text
@@ -1016,6 +1070,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 18
   },
+  touchableChordText: {
+    textDecorationLine: 'underline',
+    textDecorationStyle: 'dotted'
+  },
+
   chordLine: {
     color: '#67E1A0',
     fontSize: 23,

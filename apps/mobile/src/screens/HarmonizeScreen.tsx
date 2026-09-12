@@ -34,39 +34,60 @@ type Props = {
 type Mode = DetectedMode;
 
 const ROOTS = [
-  'C',
-  'C#',
-  'D',
-  'D#',
-  'E',
-  'F',
-  'F#',
-  'G',
-  'G#',
-  'A',
-  'A#',
-  'B'
+  'C', 'C#', 'D', 'D#',
+  'E', 'F', 'F#', 'G',
+  'G#', 'A', 'A#', 'B'
 ] as const;
 
-const MAJOR_INTERVALS = [0, 2, 4, 5, 7, 9, 11] as const;
-const MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 10] as const;
+const MAJOR_INTERVALS =
+  [0, 2, 4, 5, 7, 9, 11] as const;
 
-const MAJOR_QUALITIES = ['', 'm', 'm', '', '', 'm', 'dim'] as const;
-const MINOR_QUALITIES = ['m', 'dim', '', 'm', 'm', '', ''] as const;
+const MINOR_INTERVALS =
+  [0, 2, 3, 5, 7, 8, 10] as const;
 
-const ROMAN_MAJOR = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
-const ROMAN_MINOR = ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII'];
+const MAJOR_QUALITIES =
+  ['', 'm', 'm', '', '', 'm', 'dim'] as const;
 
-function buildHarmony(root: string, mode: Mode) {
-  const intervals = mode === 'major' ? MAJOR_INTERVALS : MINOR_INTERVALS;
-  const qualities = mode === 'major' ? MAJOR_QUALITIES : MINOR_QUALITIES;
-  const roman = mode === 'major' ? ROMAN_MAJOR : ROMAN_MINOR;
+const MINOR_QUALITIES =
+  ['m', 'dim', '', 'm', 'm', '', ''] as const;
 
-  const scale = intervals.map(interval => transposeNote(root, interval));
+const ROMAN_MAJOR =
+  ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
 
-  const chords = scale.map(
-    (note, index) => `${note}${qualities[index] ?? ''}`
-  );
+const ROMAN_MINOR =
+  ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII'];
+
+const ANALYSIS_BLOCK_SIZE = 8192;
+
+function buildHarmony(
+  root: string,
+  mode: Mode
+) {
+  const intervals =
+    mode === 'major'
+      ? MAJOR_INTERVALS
+      : MINOR_INTERVALS;
+
+  const qualities =
+    mode === 'major'
+      ? MAJOR_QUALITIES
+      : MINOR_QUALITIES;
+
+  const roman =
+    mode === 'major'
+      ? ROMAN_MAJOR
+      : ROMAN_MINOR;
+
+  const scale =
+    intervals.map(interval =>
+      transposeNote(root, interval)
+    );
+
+  const chords =
+    scale.map(
+      (note, index) =>
+        `${note}${qualities[index] ?? ''}`
+    );
 
   return {
     scale,
@@ -75,64 +96,168 @@ function buildHarmony(root: string, mode: Mode) {
   };
 }
 
-function progression(chords: string[], indexes: number[]) {
+function progression(
+  chords: string[],
+  indexes: number[]
+) {
   return indexes
     .map(index => chords[index])
     .filter(Boolean)
     .join('  –  ');
 }
 
-export function HarmonizeScreen({ onBack }: Props) {
-  const [root, setRoot] = React.useState('C');
-  const [mode, setMode] = React.useState<Mode>('major');
-  const [confidence, setConfidence] = React.useState<number | null>(null);
-  const [listeningSeconds, setListeningSeconds] = React.useState(0);
-  const [framesAccepted, setFramesAccepted] = React.useState(0);
+function appendSamples(
+  current: Float32Array,
+  incoming: Float32Array
+) {
+  const merged =
+    new Float32Array(
+      current.length +
+        incoming.length
+    );
 
-  const accumulatedChroma = React.useRef<number[]>(
-    new Array<number>(12).fill(0)
+  merged.set(current, 0);
+  merged.set(
+    incoming,
+    current.length
   );
-  const lastFrameAt = React.useRef(0);
-  const startedAt = React.useRef(0);
-  const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const audioStream = useAudioStream({
-    sampleRate: 48000,
-    channels: 1,
-    encoding: 'float32',
-    onBuffer: (buffer: AudioStreamBuffer) => {
-      const now = Date.now();
+  return merged;
+}
 
-      if (now - lastFrameAt.current < 180) {
-        return;
+export function HarmonizeScreen({
+  onBack
+}: Props) {
+  const [root, setRoot] =
+    React.useState('C');
+
+  const [mode, setMode] =
+    React.useState<Mode>('major');
+
+  const [confidence, setConfidence] =
+    React.useState<number | null>(null);
+
+  const [isListening, setIsListening] =
+    React.useState(false);
+
+  const [listeningSeconds, setListeningSeconds] =
+    React.useState(0);
+
+  const [acceptedBlocks, setAcceptedBlocks] =
+    React.useState(0);
+
+  const listeningRef =
+    React.useRef(false);
+
+  const acceptedBlocksRef =
+    React.useRef(0);
+
+  const accumulatedChroma =
+    React.useRef<number[]>(
+      new Array<number>(12).fill(0)
+    );
+
+  const pendingSamplesRef =
+    React.useRef<Float32Array>(
+      new Float32Array(0)
+    );
+
+  const startedAt =
+    React.useRef(0);
+
+  const timerRef =
+    React.useRef<
+      ReturnType<typeof setInterval> | null
+    >(null);
+
+  const audioStream =
+    useAudioStream({
+      sampleRate: 48000,
+      channels: 1,
+      encoding: 'float32',
+      onBuffer: (
+        buffer: AudioStreamBuffer
+      ) => {
+        if (!listeningRef.current) {
+          return;
+        }
+
+        const incoming =
+          new Float32Array(
+            buffer.data
+          );
+
+        if (!incoming.length) {
+          return;
+        }
+
+        pendingSamplesRef.current =
+          appendSamples(
+            pendingSamplesRef.current,
+            incoming
+          );
+
+        while (
+          pendingSamplesRef.current.length >=
+          ANALYSIS_BLOCK_SIZE
+        ) {
+          const block =
+            pendingSamplesRef.current.slice(
+              0,
+              ANALYSIS_BLOCK_SIZE
+            );
+
+          pendingSamplesRef.current =
+            pendingSamplesRef.current.slice(
+              ANALYSIS_BLOCK_SIZE
+            );
+
+          const chroma =
+            extractChroma(
+              block,
+              buffer.sampleRate
+            );
+
+          if (!chroma) {
+            continue;
+          }
+
+          mergeChroma(
+            accumulatedChroma.current,
+            chroma
+          );
+
+          acceptedBlocksRef.current += 1;
+          setAcceptedBlocks(
+            acceptedBlocksRef.current
+          );
+
+          if (
+            acceptedBlocksRef.current >= 3
+          ) {
+            const result =
+              detectKeyFromChroma(
+                accumulatedChroma.current
+              );
+
+            if (result) {
+              setRoot(result.root);
+              setMode(result.mode);
+              setConfidence(
+                result.confidence
+              );
+            }
+          }
+        }
       }
+    });
 
-      lastFrameAt.current = now;
-
-      const frames = new Float32Array(buffer.data);
-      const chroma = extractChroma(frames, buffer.sampleRate);
-
-      if (!chroma) {
-        return;
-      }
-
-      mergeChroma(accumulatedChroma.current, chroma);
-      setFramesAccepted(current => current + 1);
-
-      const result = detectKeyFromChroma(accumulatedChroma.current);
-
-      if (result && framesAccepted >= 5) {
-        setRoot(result.root);
-        setMode(result.mode);
-        setConfidence(result.confidence);
-      }
-    }
-  });
-
-  const harmony = React.useMemo(
-    () => buildHarmony(root, mode),
-    [root, mode]
-  );
+  const harmony =
+    React.useMemo(
+      () =>
+        buildHarmony(root, mode),
+      [root, mode]
+    );
 
   const progressions =
     mode === 'major'
@@ -149,80 +274,130 @@ export function HarmonizeScreen({ onBack }: Props) {
           [0, 5, 3, 4]
         ];
 
-  React.useEffect(() => {
-    return () => {
+  const finishDetection =
+    React.useCallback(async () => {
+      if (!listeningRef.current) {
+        return;
+      }
+
+      listeningRef.current = false;
+      setIsListening(false);
+
       if (timerRef.current) {
-        clearInterval(timerRef.current);
+        clearInterval(
+          timerRef.current
+        );
+
+        timerRef.current = null;
       }
 
       try {
         audioStream.stream.stop();
       } catch {}
 
-      releaseAudioSession().catch(() => undefined);
+      const result =
+        detectKeyFromChroma(
+          accumulatedChroma.current
+        );
+
+      if (
+        result &&
+        acceptedBlocksRef.current >= 2
+      ) {
+        setRoot(result.root);
+        setMode(result.mode);
+        setConfidence(
+          result.confidence
+        );
+      } else {
+        Alert.alert(
+          'Não consegui identificar o tom',
+          'Tente novamente com a música mais próxima do microfone e use um trecho com instrumentos e acordes claros.'
+        );
+      }
+
+      await releaseAudioSession();
+    }, [audioStream.stream]);
+
+  React.useEffect(() => {
+    return () => {
+      listeningRef.current = false;
+
+      if (timerRef.current) {
+        clearInterval(
+          timerRef.current
+        );
+      }
+
+      try {
+        audioStream.stream.stop();
+      } catch {}
+
+      releaseAudioSession().catch(
+        () => undefined
+      );
     };
-  }, []);
-
-  async function stopDetection() {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
-    try {
-      audioStream.stream.stop();
-    } catch {}
-
-    const result = detectKeyFromChroma(accumulatedChroma.current);
-
-    if (result && framesAccepted >= 6) {
-      setRoot(result.root);
-      setMode(result.mode);
-      setConfidence(result.confidence);
-    }
-
-    await releaseAudioSession();
-  }
+  }, [audioStream.stream]);
 
   async function startDetection() {
-    if (audioStream.isStreaming) {
-      await stopDetection();
+    if (listeningRef.current) {
+      await finishDetection();
       return;
     }
 
-    const permission = await requestRecordingPermissionsAsync();
+    const permission =
+      await requestRecordingPermissionsAsync();
 
     if (!permission.granted) {
       Alert.alert(
         'Microfone',
         'Precisamos da permissão do microfone para detectar a tonalidade.'
       );
+
       return;
     }
 
-    accumulatedChroma.current = new Array<number>(12).fill(0);
-    setFramesAccepted(0);
+    accumulatedChroma.current =
+      new Array<number>(12).fill(0);
+
+    pendingSamplesRef.current =
+      new Float32Array(0);
+
+    acceptedBlocksRef.current = 0;
+    setAcceptedBlocks(0);
     setListeningSeconds(0);
     setConfidence(null);
-    lastFrameAt.current = 0;
-    startedAt.current = Date.now();
 
     try {
       await prepareRecordingAudio();
+
+      listeningRef.current = true;
+      setIsListening(true);
+      startedAt.current = Date.now();
+
       await audioStream.stream.start();
 
-      timerRef.current = setInterval(() => {
-        const elapsed = Math.floor(
-          (Date.now() - startedAt.current) / 1000
-        );
+      timerRef.current =
+        setInterval(() => {
+          const elapsed =
+            Math.floor(
+              (Date.now() -
+                startedAt.current) /
+                1000
+            );
 
-        setListeningSeconds(elapsed);
+          setListeningSeconds(
+            elapsed
+          );
 
-        if (elapsed >= 10) {
-          void stopDetection();
-        }
-      }, 500);
+          if (elapsed >= 12) {
+            void finishDetection();
+          }
+        }, 500);
     } catch {
+      listeningRef.current = false;
+      setIsListening(false);
+
       Alert.alert(
         'Detectar tonalidade',
         'Não foi possível iniciar a leitura do microfone.'
@@ -230,23 +405,29 @@ export function HarmonizeScreen({ onBack }: Props) {
     }
   }
 
-  const detectionLabel = audioStream.isStreaming
-    ? `Ouvindo... ${Math.min(listeningSeconds, 10)}s`
-    : confidence !== null
-      ? `${root} ${mode === 'major' ? 'maior' : 'menor'}`
-      : 'Pronto para ouvir';
+  const detectionLabel =
+    isListening
+      ? `Ouvindo... ${Math.min(listeningSeconds, 12)}s`
+      : confidence !== null
+        ? `${root} ${mode === 'major' ? 'maior' : 'menor'}`
+        : 'Pronto para ouvir';
 
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.screen}>
         <View style={styles.topBar}>
-          <Pressable onPress={onBack} style={styles.backButton}>
+          <Pressable
+            onPress={onBack}
+            style={styles.backButton}
+          >
             <Text style={styles.backText}>‹</Text>
           </Pressable>
 
           <View style={styles.topTitle}>
             <Text style={styles.title}>Harmonizar</Text>
-            <Text style={styles.topSubtitle}>TOM E CAMPO HARMÔNICO</Text>
+            <Text style={styles.topSubtitle}>
+              TOM E CAMPO HARMÔNICO
+            </Text>
           </View>
 
           <View style={styles.spacer} />
@@ -262,7 +443,9 @@ export function HarmonizeScreen({ onBack }: Props) {
             <Text style={styles.heroKey}>
               {root}
               <Text style={styles.heroMode}>
-                {mode === 'major' ? ' maior' : ' menor'}
+                {mode === 'major'
+                  ? ' maior'
+                  : ' menor'}
               </Text>
             </Text>
 
@@ -274,26 +457,45 @@ export function HarmonizeScreen({ onBack }: Props) {
           <View style={styles.detectorCard}>
             <View style={styles.detectorHeader}>
               <View>
-                <Text style={styles.detectorEyebrow}>DETECTAR PELO ÁUDIO</Text>
-                <Text style={styles.detectorTitle}>{detectionLabel}</Text>
+                <Text style={styles.detectorEyebrow}>
+                  DETECTAR PELO ÁUDIO
+                </Text>
+
+                <Text style={styles.detectorTitle}>
+                  {detectionLabel}
+                </Text>
               </View>
 
               <View
                 style={[
                   styles.liveDot,
-                  audioStream.isStreaming ? styles.liveDotActive : null
+                  isListening
+                    ? styles.liveDotActive
+                    : null
                 ]}
               />
             </View>
 
             <Text style={styles.detectorText}>
-              Toque a música perto do microfone por alguns segundos. Para uma leitura melhor, use um trecho com acordes claros e pouca fala.
+              Toque a música perto do microfone por 8 a 12 segundos. Prefira um trecho com acordes claros e pouca fala.
             </Text>
 
-            {confidence !== null && !audioStream.isStreaming ? (
+            {isListening ? (
+              <Text style={styles.debugText}>
+                Blocos de áudio analisados: {acceptedBlocks}
+              </Text>
+            ) : null}
+
+            {confidence !== null &&
+            !isListening ? (
               <View style={styles.confidenceRow}>
-                <Text style={styles.confidenceLabel}>Confiança estimada</Text>
-                <Text style={styles.confidenceValue}>{confidence}%</Text>
+                <Text style={styles.confidenceLabel}>
+                  Confiança estimada
+                </Text>
+
+                <Text style={styles.confidenceValue}>
+                  {confidence}%
+                </Text>
               </View>
             ) : null}
 
@@ -301,23 +503,31 @@ export function HarmonizeScreen({ onBack }: Props) {
               onPress={startDetection}
               style={[
                 styles.detectButton,
-                audioStream.isStreaming ? styles.detectButtonActive : null
+                isListening
+                  ? styles.detectButtonActive
+                  : null
               ]}
             >
               <Text style={styles.detectButtonIcon}>
-                {audioStream.isStreaming ? '■' : '●'}
+                {isListening ? '■' : '●'}
               </Text>
+
               <Text style={styles.detectButtonText}>
-                {audioStream.isStreaming ? 'Parar análise' : 'Detectar tonalidade'}
+                {isListening
+                  ? 'Parar análise'
+                  : 'Detectar tonalidade'}
               </Text>
             </Pressable>
           </View>
 
-          <Text style={styles.sectionTitle}>Tonalidade</Text>
+          <Text style={styles.sectionTitle}>
+            Tonalidade
+          </Text>
 
           <View style={styles.rootGrid}>
             {ROOTS.map(note => {
-              const active = note === root;
+              const active =
+                note === root;
 
               return (
                 <Pressable
@@ -328,13 +538,17 @@ export function HarmonizeScreen({ onBack }: Props) {
                   }}
                   style={[
                     styles.rootButton,
-                    active && styles.rootButtonActive
+                    active
+                      ? styles.rootButtonActive
+                      : null
                   ]}
                 >
                   <Text
                     style={[
                       styles.rootText,
-                      active && styles.rootTextActive
+                      active
+                        ? styles.rootTextActive
+                        : null
                     ]}
                   >
                     {note}
@@ -352,13 +566,17 @@ export function HarmonizeScreen({ onBack }: Props) {
               }}
               style={[
                 styles.modeButton,
-                mode === 'major' && styles.modeButtonActive
+                mode === 'major'
+                  ? styles.modeButtonActive
+                  : null
               ]}
             >
               <Text
                 style={[
                   styles.modeText,
-                  mode === 'major' && styles.modeTextActive
+                  mode === 'major'
+                    ? styles.modeTextActive
+                    : null
                 ]}
               >
                 Maior
@@ -372,13 +590,17 @@ export function HarmonizeScreen({ onBack }: Props) {
               }}
               style={[
                 styles.modeButton,
-                mode === 'minor' && styles.modeButtonActive
+                mode === 'minor'
+                  ? styles.modeButtonActive
+                  : null
               ]}
             >
               <Text
                 style={[
                   styles.modeText,
-                  mode === 'minor' && styles.modeTextActive
+                  mode === 'minor'
+                    ? styles.modeTextActive
+                    : null
                 ]}
               >
                 Menor
@@ -386,37 +608,50 @@ export function HarmonizeScreen({ onBack }: Props) {
             </Pressable>
           </View>
 
-          <Text style={styles.sectionTitle}>Escala</Text>
+          <Text style={styles.sectionTitle}>
+            Escala
+          </Text>
 
           <View style={styles.noteRow}>
             {harmony.scale.map(note => (
-              <View key={note} style={styles.notePill}>
-                <Text style={styles.noteText}>{note}</Text>
+              <View
+                key={note}
+                style={styles.notePill}
+              >
+                <Text style={styles.noteText}>
+                  {note}
+                </Text>
               </View>
             ))}
           </View>
 
-          <Text style={styles.sectionTitle}>Campo harmônico</Text>
+          <Text style={styles.sectionTitle}>
+            Campo harmônico
+          </Text>
 
           <View style={styles.chordList}>
-            {harmony.chords.map((chord, index) => (
-              <View
-                key={`${chord}-${index}`}
-                style={styles.chordRow}
-              >
-                <View style={styles.degree}>
-                  <Text style={styles.degreeText}>
-                    {harmony.roman[index]}
+            {harmony.chords.map(
+              (chord, index) => (
+                <View
+                  key={`${chord}-${index}`}
+                  style={styles.chordRow}
+                >
+                  <View style={styles.degree}>
+                    <Text style={styles.degreeText}>
+                      {harmony.roman[index]}
+                    </Text>
+                  </View>
+
+                  <Text style={styles.chord}>
+                    {chord}
+                  </Text>
+
+                  <Text style={styles.chordHint}>
+                    Grau {index + 1}
                   </Text>
                 </View>
-
-                <Text style={styles.chord}>{chord}</Text>
-
-                <Text style={styles.chordHint}>
-                  Grau {index + 1}
-                </Text>
-              </View>
-            ))}
+              )
+            )}
           </View>
 
           <Text style={styles.sectionTitle}>
@@ -424,24 +659,25 @@ export function HarmonizeScreen({ onBack }: Props) {
           </Text>
 
           <View style={styles.progressions}>
-            {progressions.map((indexes, index) => (
-              <View key={index} style={styles.progressionCard}>
-                <Text style={styles.progressionLabel}>
-                  OPÇÃO {index + 1}
-                </Text>
+            {progressions.map(
+              (indexes, index) => (
+                <View
+                  key={index}
+                  style={styles.progressionCard}
+                >
+                  <Text style={styles.progressionLabel}>
+                    OPÇÃO {index + 1}
+                  </Text>
 
-                <Text style={styles.progressionText}>
-                  {progression(harmony.chords, indexes)}
-                </Text>
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.infoCard}>
-            <Text style={styles.infoTitle}>Primeira versão da detecção</Text>
-            <Text style={styles.infoText}>
-              A análise considera a distribuição das 12 notas durante cerca de 10 segundos e compara perfis de tonalidades maiores e menores. Você continua podendo corrigir o resultado manualmente.
-            </Text>
+                  <Text style={styles.progressionText}>
+                    {progression(
+                      harmony.chords,
+                      indexes
+                    )}
+                  </Text>
+                </View>
+              )
+            )}
           </View>
         </ScrollView>
       </View>
@@ -561,6 +797,12 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 11,
     lineHeight: 17,
+    marginTop: 10
+  },
+  debugText: {
+    color: colors.greenDark,
+    fontSize: 10,
+    fontWeight: '800',
     marginTop: 10
   },
   liveDot: {
@@ -746,22 +988,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
     marginTop: 6
-  },
-  infoCard: {
-    borderRadius: 20,
-    backgroundColor: '#EDF7F0',
-    padding: 18,
-    marginTop: 26
-  },
-  infoTitle: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: '900'
-  },
-  infoText: {
-    color: colors.muted,
-    fontSize: 11,
-    lineHeight: 18,
-    marginTop: 5
   }
 });
